@@ -1,0 +1,19 @@
+CLAUDE.md
+
+# Local AI-agent integrations (restored from apm.yml/apm.lock.yaml)
+.agents/
+.claude/
+.codex/
+
+# APM local state and materialized dependencies
+.apm/
+apm_modules/
+
+# Project-local APM tooling
+.tools/
+
+# Local Microsoft Fabric / Azure administration state
+# Never commit cached credentials, tokens, API responses, exports or backups.
+.azure/
+.fabric/
+.fabric-admin/

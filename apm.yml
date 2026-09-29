@@ -1,0 +1,15 @@
+name: msfabric-minor
+version: 1.0.0
+description: APM project for msfabric-minor
+author: Dev
+# Which agent platforms to deploy to.
+# Resolution order: --target flag > this field > auto-detect from filesystem.
+# Accepted values: agent-skills, antigravity, claude, codex, copilot, cursor, gemini, grok-build, hermes, kiro, opencode, vscode, windsurf
+targets:
+  - codex
+dependencies:
+  apm:
+    - microsoft/skills-for-fabric
+  mcp: []
+includes: auto
+scripts: {}
