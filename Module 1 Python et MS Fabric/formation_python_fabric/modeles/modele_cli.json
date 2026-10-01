@@ -1,0 +1,13 @@
+{
+  "scikit_learn": "1.8.0",
+  "variables": [
+    "site_id",
+    "heure",
+    "weekend",
+    "capacity_mw",
+    "lag_24",
+    "lag_168",
+    "moy_veille"
+  ],
+  "mae_test": 0.0584
+}

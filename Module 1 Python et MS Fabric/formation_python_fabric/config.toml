@@ -1,0 +1,7 @@
+[chemins]
+entree = "data/consommation_echantillon.csv"
+sites = "data/sites_reference.csv"
+
+[seuils]
+anomalies_max = 0.10
+taux_charge_critique = 0.8
