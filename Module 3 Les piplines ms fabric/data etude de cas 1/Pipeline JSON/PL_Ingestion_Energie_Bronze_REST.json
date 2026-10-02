@@ -1,0 +1,348 @@
+{
+    "name": "PL_Ingestion_Energie_Bronze",
+    "objectId": "aa92a79f-71e1-4cc8-9ecc-8641d46b6be5",
+    "properties": {
+        "description": "Ingestion REST des donnees energie vers les tables Bronze",
+        "parameters": {
+            "Endpoints": {
+                "type": "Array",
+                "defaultValue": [
+                    {
+                        "relativeUrl": "api/besoins",
+                        "table": "besoins_energetiques",
+                        "mappings": [
+                            {
+                                "source": {
+                                    "path": "$['Timestamp']",
+                                    "type": "String"
+                                },
+                                "sink": {
+                                    "name": "Timestamp",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Zone']",
+                                    "type": "String"
+                                },
+                                "sink": {
+                                    "name": "Zone",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Consommation_kWh']",
+                                    "type": "Double"
+                                },
+                                "sink": {
+                                    "name": "Consommation_kWh",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Type_Energie']",
+                                    "type": "String"
+                                },
+                                "sink": {
+                                    "name": "Type_Energie",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Cout_Euro']",
+                                    "type": "Double"
+                                },
+                                "sink": {
+                                    "name": "Cout_Euro",
+                                    "type": "String"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "relativeUrl": "api/production-solaire",
+                        "table": "production_solaire",
+                        "mappings": [
+                            {
+                                "source": {
+                                    "path": "$['PanneauID']",
+                                    "type": "String"
+                                },
+                                "sink": {
+                                    "name": "PanneauID",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Date']",
+                                    "type": "String"
+                                },
+                                "sink": {
+                                    "name": "Date",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Zone_Installation']",
+                                    "type": "String"
+                                },
+                                "sink": {
+                                    "name": "Zone_Installation",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Production_kWh']",
+                                    "type": "Double"
+                                },
+                                "sink": {
+                                    "name": "Production_kWh",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Ensoleillement_Heures']",
+                                    "type": "Double"
+                                },
+                                "sink": {
+                                    "name": "Ensoleillement_Heures",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Rendement_Pct']",
+                                    "type": "Double"
+                                },
+                                "sink": {
+                                    "name": "Rendement_Pct",
+                                    "type": "String"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "relativeUrl": "api/production-eolienne",
+                        "table": "production_eolienne",
+                        "mappings": [
+                            {
+                                "source": {
+                                    "path": "$['TurbineID']",
+                                    "type": "String"
+                                },
+                                "sink": {
+                                    "name": "TurbineID",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Timestamp']",
+                                    "type": "String"
+                                },
+                                "sink": {
+                                    "name": "Timestamp",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Vitesse_Vent_ms']",
+                                    "type": "Double"
+                                },
+                                "sink": {
+                                    "name": "Vitesse_Vent_ms",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Production_kWh']",
+                                    "type": "Double"
+                                },
+                                "sink": {
+                                    "name": "Production_kWh",
+                                    "type": "String"
+                                }
+                            },
+                            {
+                                "source": {
+                                    "path": "$['Statut']",
+                                    "type": "String"
+                                },
+                                "sink": {
+                                    "name": "Statut",
+                                    "type": "String"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        "activities": [
+            {
+                "name": "BouclerEndpoints",
+                "type": "ForEach",
+                "dependsOn": [],
+                "typeProperties": {
+                    "items": {
+                        "value": "@pipeline().parameters.Endpoints",
+                        "type": "Expression"
+                    },
+                    "isSequential": true,
+                    "activities": [
+                        {
+                            "name": "CopierRestVersBronze",
+                            "type": "Copy",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "RestSource",
+                                    "httpRequestTimeout": "00:01:40",
+                                    "requestMethod": "GET",
+                                    "additionalHeaders": {},
+                                    "paginationRules": {},
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "type": "RestResource",
+                                        "typeProperties": {
+                                            "relativeUrl": {
+                                                "value": "@item().relativeUrl",
+                                                "type": "Expression"
+                                            }
+                                        },
+                                        "schema": [],
+                                        "externalReferences": {
+                                            "connection": "b9496ccc-3b63-46d9-841c-1ae1b242f22a"
+                                        }
+                                    }
+                                },
+                                "sink": {
+                                    "type": "LakehouseTableSink",
+                                    "tableActionOption": "Append",
+                                    "applyVOrder": false,
+                                    "enableTimestampNtz": false,
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "linkedService": {
+                                            "name": "LH_Energie_Bronze",
+                                            "properties": {
+                                                "annotations": [],
+                                                "type": "Lakehouse",
+                                                "typeProperties": {
+                                                    "workspaceId": "21d3b91a-dd52-4df3-9d6b-7c8201bc6d3c",
+                                                    "artifactId": "4a5d2159-1e1f-4f1d-8463-419871d11be5",
+                                                    "rootFolder": "Tables"
+                                                }
+                                            }
+                                        },
+                                        "type": "LakehouseTable",
+                                        "schema": [],
+                                        "typeProperties": {
+                                            "table": {
+                                                "value": "@item().table",
+                                                "type": "Expression"
+                                            }
+                                        }
+                                    }
+                                },
+                                "enableStaging": false,
+                                "translator": {
+                                    "type": "TabularTranslator",
+                                    "mappings": {
+                                        "value": "@item().mappings",
+                                        "type": "Expression"
+                                    },
+                                    "typeConversion": true,
+                                    "typeConversionSettings": {
+                                        "allowDataTruncation": true,
+                                        "treatBooleanAsNumber": false
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "TracerFichier",
+                            "type": "AppendVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "CopierRestVersBronze",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "typeProperties": {
+                                "variableName": "FichiersTemp",
+                                "value": {
+                                    "value": "@item().table",
+                                    "type": "Expression"
+                                }
+                            },
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            }
+                        },
+                        {
+                            "name": "RecupererTracage",
+                            "type": "SetVariable",
+                            "dependsOn": [
+                                {
+                                    "activity": "TracerFichier",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "variableName": "FichiersTraites",
+                                "value": {
+                                    "value": "@variables('FichiersTemp')",
+                                    "type": "Expression"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "variables": {
+            "FichiersTraites": {
+                "type": "Array",
+                "defaultValue": []
+            },
+            "FichierActuel": {
+                "type": "String"
+            },
+            "NombreFichiers": {
+                "type": "String",
+                "defaultValue": "0"
+            },
+            "FichiersTemp": {
+                "type": "Array",
+                "defaultValue": []
+            }
+        }
+    }
+}

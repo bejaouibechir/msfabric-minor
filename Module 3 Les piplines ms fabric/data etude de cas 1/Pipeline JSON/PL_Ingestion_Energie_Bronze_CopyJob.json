@@ -1,0 +1,235 @@
+{
+    "name": "PL_Ingestion_Energie_Bronze_CopyJob",
+    "properties": {
+        "description": "Variante Copy job de l'ingestion des CSV landing vers les tables Bronze (tables _cj)",
+        "activities": [
+            {
+                "name": "ScanLanding",
+                "type": "GetMetadata",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "fieldList": [
+                        "childItems"
+                    ],
+                    "datasetSettings": {
+                        "annotations": [],
+                        "linkedService": {
+                            "name": "LH_Energie_Bronze",
+                            "properties": {
+                                "annotations": [],
+                                "type": "Lakehouse",
+                                "typeProperties": {
+                                    "workspaceId": "21d3b91a-dd52-4df3-9d6b-7c8201bc6d3c",
+                                    "artifactId": "4a5d2159-1e1f-4f1d-8463-419871d11be5",
+                                    "rootFolder": "Files"
+                                }
+                            }
+                        },
+                        "type": "DelimitedText",
+                        "typeProperties": {
+                            "location": {
+                                "type": "LakehouseLocation",
+                                "folderPath": "landing"
+                            },
+                            "columnDelimiter": ",",
+                            "escapeChar": "\\",
+                            "firstRowAsHeader": true,
+                            "quoteChar": "\""
+                        },
+                        "schema": []
+                    },
+                    "storeSettings": {
+                        "type": "AzureBlobStorageReadSettings",
+                        "recursive": true,
+                        "enablePartitionDiscovery": false
+                    },
+                    "formatSettings": {
+                        "type": "DelimitedTextReadSettings"
+                    }
+                }
+            },
+            {
+                "name": "BouclerFichiers",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "ScanLanding",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('ScanLanding').output.childItems",
+                        "type": "Expression"
+                    },
+                    "isSequential": true,
+                    "activities": [
+                        {
+                            "name": "EstCSV",
+                            "type": "IfCondition",
+                            "dependsOn": [],
+                            "typeProperties": {
+                                "expression": {
+                                    "value": "@endswith(item().name, '.csv')",
+                                    "type": "Expression"
+                                },
+                                "ifFalseActivities": [],
+                                "ifTrueActivities": [
+                                    {
+                                        "name": "ChoisirCopyJob",
+                                        "type": "Switch",
+                                        "dependsOn": [],
+                                        "typeProperties": {
+                                            "on": {
+                                                "value": "@item().name",
+                                                "type": "Expression"
+                                            },
+                                            "cases": [
+                                                {
+                                                    "value": "besoins_energetiques.csv",
+                                                    "activities": [
+                                                        {
+                                                            "name": "CJ_Besoins_Energetiques",
+                                                            "type": "InvokeCopyJob",
+                                                            "dependsOn": [],
+                                                            "typeProperties": {
+                                                                "copyJobId": "4e06d5c2-86e4-4f9c-8c1a-b2fb088a998b",
+                                                                "workspaceId": "21d3b91a-dd52-4df3-9d6b-7c8201bc6d3c",
+                                                                "operationType": "RunCopyJob"
+                                                            },
+                                                            "policy": {
+                                                                "retry": 0,
+                                                                "retryIntervalInSeconds": 30,
+                                                                "secureOutput": false,
+                                                                "secureInput": false
+                                                            }
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "value": "production_solaire.csv",
+                                                    "activities": [
+                                                        {
+                                                            "name": "CJ_Production_Solaire",
+                                                            "type": "InvokeCopyJob",
+                                                            "dependsOn": [],
+                                                            "typeProperties": {
+                                                                "copyJobId": "d7441593-a885-4a7d-aa9d-c4c647b48244",
+                                                                "workspaceId": "21d3b91a-dd52-4df3-9d6b-7c8201bc6d3c",
+                                                                "operationType": "RunCopyJob"
+                                                            },
+                                                            "policy": {
+                                                                "retry": 0,
+                                                                "retryIntervalInSeconds": 30,
+                                                                "secureOutput": false,
+                                                                "secureInput": false
+                                                            }
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "value": "production_eolienne.csv",
+                                                    "activities": [
+                                                        {
+                                                            "name": "CJ_Production_Eolienne",
+                                                            "type": "InvokeCopyJob",
+                                                            "dependsOn": [],
+                                                            "typeProperties": {
+                                                                "copyJobId": "64d09021-0c22-45e1-b45a-fd3b2506e187",
+                                                                "workspaceId": "21d3b91a-dd52-4df3-9d6b-7c8201bc6d3c",
+                                                                "operationType": "RunCopyJob"
+                                                            },
+                                                            "policy": {
+                                                                "retry": 0,
+                                                                "retryIntervalInSeconds": 30,
+                                                                "secureOutput": false,
+                                                                "secureInput": false
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                            "defaultActivities": []
+                                        }
+                                    },
+                                    {
+                                        "name": "TracerFichier",
+                                        "type": "AppendVariable",
+                                        "dependsOn": [
+                                            {
+                                                "activity": "ChoisirCopyJob",
+                                                "dependencyConditions": [
+                                                    "Succeeded"
+                                                ]
+                                            }
+                                        ],
+                                        "typeProperties": {
+                                            "variableName": "FichiersTemp",
+                                            "value": {
+                                                "value": "@item().name",
+                                                "type": "Expression"
+                                            }
+                                        },
+                                        "policy": {
+                                            "secureOutput": false,
+                                            "secureInput": false
+                                        }
+                                    },
+                                    {
+                                        "name": "RecupererTracage",
+                                        "type": "SetVariable",
+                                        "dependsOn": [
+                                            {
+                                                "activity": "TracerFichier",
+                                                "dependencyConditions": [
+                                                    "Succeeded"
+                                                ]
+                                            }
+                                        ],
+                                        "policy": {
+                                            "secureOutput": false,
+                                            "secureInput": false
+                                        },
+                                        "typeProperties": {
+                                            "variableName": "FichiersTraites",
+                                            "value": {
+                                                "value": "@variables('FichiersTemp')",
+                                                "type": "Expression"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "variables": {
+            "FichiersTraites": {
+                "type": "Array",
+                "defaultValue": []
+            },
+            "FichierActuel": {
+                "type": "String"
+            },
+            "NombreFichiers": {
+                "type": "String",
+                "defaultValue": "0"
+            },
+            "FichiersTemp": {
+                "type": "Array",
+                "defaultValue": []
+            }
+        }
+    }
+}
