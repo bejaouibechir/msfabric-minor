@@ -23,7 +23,7 @@ Problème : **ce traitement doit se déclencher automatiquement** à chaque nouv
 ```
 Nouveau fichier .txt dans Files/audio_calls/
         ↓
-  Pipeline Data Factory (déclencheur événementiel OneLake FileCreated)
+  Pipeline Data Factory (déclencheur planifié toutes les 15 min)
      ├─ Activité 1 : Notebook paramétré (enrichissement + MERGE Silver)
      ├─ Activité 2 : If Condition (score_risque_churn ≥ 50 ?)
      │       ├─ OUI → Set Variable "ALERTE" (visible Monitor) + écriture table alertes_critiques
@@ -74,71 +74,30 @@ print("✅ Packages installés avec succès")
 ```python
 # === CELLULE 1 : Paramètre d'entrée ===
 #
-# IMPORTANT : cette cellule doit rester marquée comme "Parameters".
-# Fabric insère la valeur transmise par le Pipeline juste après
-# l'exécution de cette cellule.
+# OBJECTIF : Déclarer la variable call_file_path comme paramètre du Notebook.
+#            Quand le Pipeline Data Factory appelle ce Notebook, il injecte
+#            la valeur réelle du chemin de fichier via ce paramètre.
+#
+# IMPORTANT : Cette cellule DOIT être marquée comme "Parameters cell" dans Fabric.
+# Comment faire :
+#   1. Cliquer sur "..." à droite de la cellule
+#   2. Sélectionner "Toggle parameter cell"
+#   3. Un bandeau bleu "Parameters" apparaît en bas de la cellule
+#
+# call_file_path : chemin relatif du fichier, ex: "Files/audio_calls/CALL_0121.txt"
+# La valeur par défaut permet de tester manuellement le Notebook sans Pipeline.
 
-call_file_path = "AUTO"
+call_file_path = "Files/audio_calls/CALL_0001.txt"  # valeur par défaut pour test
+
+print(f"Paramètre reçu : call_file_path = {call_file_path}")
 ```
 
-Pour marquer la cellule, ouvrez son menu `...`, sélectionnez **Toggle parameter cell**, puis vérifiez que le bandeau **Parameters** apparaît en bas à droite.
+> ⚠️ **Piège courant :** Oublier de basculer cette cellule en mode **Parameters** empêche le Pipeline de transmettre sa valeur. Le Notebook continuerait alors à utiliser silencieusement `CALL_0001.txt`.
 
-> ⚠️ La cellule marquée **Parameters** doit uniquement déclarer le paramètre. Ne placez pas la détection automatique dans cette cellule : Fabric injecte la valeur du Pipeline après son exécution.
+**Résultat attendu lors du test manuel :**
 
-### 1.3 bis — Cellule normale : résolution du fichier à traiter
-
-Insérez immédiatement après la cellule `Parameters` une cellule de code normale, non marquée **Parameters** :
-
-```python
-# === CELLULE 1 BIS : Résolution du fichier à traiter ===
-
-if call_file_path == "AUTO":
-    try:
-        fichiers_dossier = mssparkutils.fs.ls("Files/audio_calls/")
-
-        ids_dossier = {
-            fichier.name.removesuffix(".txt")
-            for fichier in fichiers_dossier
-            if fichier.name.endswith(".txt")
-        }
-
-        df_silver = spark.table("silver_appels_enrichis")
-        ids_silver = {
-            ligne.call_id
-            for ligne in df_silver.select("call_id").collect()
-        }
-
-        nouveaux_ids = ids_dossier - ids_silver
-
-        print(f"📊 Fichiers présents dans audio_calls : {len(ids_dossier)}")
-        print(f"📊 Appels déjà traités dans Silver    : {len(ids_silver)}")
-        print(f"📊 Nouveaux appels à traiter          : {len(nouveaux_ids)}")
-
-        if not nouveaux_ids:
-            raise RuntimeError(
-                "Aucun nouveau fichier n'est disponible dans Files/audio_calls/."
-            )
-
-        call_id_temp = sorted(nouveaux_ids)[0]
-        call_file_path = f"Files/audio_calls/{call_id_temp}.txt"
-
-        print(
-            "🚀 Nouveau fichier détecté automatiquement "
-            f"→ {call_file_path}"
-        )
-
-    except Exception as e:
-        raise RuntimeError(
-            f"Échec de la détection automatique : {e}"
-        ) from e
-
-else:
-    print(
-        "🧪 Chemin explicite reçu du Pipeline : "
-        f"{call_file_path}"
-    )
-
-print(f"Paramètre final utilisé : call_file_path = {call_file_path}")
+```text
+Paramètre reçu : call_file_path = Files/audio_calls/CALL_0001.txt
 ```
 
 ### 1.4 — Cellule 2 : Extraction du call_id depuis le chemin
@@ -326,7 +285,7 @@ df_nouveau = spark.createDataFrame([Row(
     intent_detecte    = resultat["intent_detecte"],
     score_risque_churn= int(resultat["score_risque_churn"]),
     alerte_critique   = bool(resultat["alerte_critique"]),
-    date_mise_a_jour  = datetime.now(),
+    date_mise_a_jour  = datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
 )])
 df_nouveau.createOrReplaceTempView("staging_appel")
 
@@ -369,7 +328,7 @@ if resultat["alerte_critique"]:
         "sentiment_ia":       resultat["sentiment_ia"],
         "intent_detecte":     resultat["intent_detecte"],
         "statut":             "NON_TRAITEE",
-        "date_alerte":        datetime.now(),
+        "date_alerte":        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }])
     df_alerte.createOrReplaceTempView("staging_alerte")
 
@@ -434,9 +393,7 @@ mssparkutils.notebook.exit(json.dumps({
 4. Onglet **Parameters** du Pipeline (pas de l'activité) → **+ New** :
    - Nom : `fichier_entrant`
    - Type : `String`
-   - Valeur par défaut : `AUTO`
-
-> ⚠️ **Point de contrôle validé :** après avoir sélectionné `NB_Traitement_Incremental`, développez réellement **Base parameters**. Le paramètre n'est pas ajouté automatiquement par la création de l'activité. Sans `call_file_path = @pipeline().parameters.fichier_entrant`, le Notebook conserve `AUTO`, même si un chemin est saisi dans la fenêtre **Pipeline run**.
+   - Valeur par défaut : `Files/audio_calls/CALL_0001.txt`
 
 ### 2.3 — Activité 2 : Condition If (seuil alerte)
 
@@ -447,7 +404,7 @@ mssparkutils.notebook.exit(json.dumps({
 3. Nommer : `ACT_Condition_Alerte`
 
 4. Expression :
-
+   
    ```
    @greaterOrEquals(
     int(json(activity('ACT_Analyser_Appel').output.result.exitValue).score),
@@ -466,7 +423,7 @@ mssparkutils.notebook.exit(json.dumps({
 3. Variables du Pipeline → **+ New** : nom `statut_traitement`, type `String`
 
 4. Valeur :
-
+   
    ```
    @concat('ALERTE CRITIQUE — ',
     json(activity('ACT_Analyser_Appel').output.result.exitValue).fichier,
@@ -488,7 +445,7 @@ mssparkutils.notebook.exit(json.dumps({
 3. Même variable `statut_traitement`
 
 4. Valeur :
-
+   
    ```
    @concat('OK — ',
     json(activity('ACT_Analyser_Appel').output.result.exitValue).fichier,
@@ -519,74 +476,102 @@ mssparkutils.notebook.exit(json.dumps({
 
 1. Ouvrir le Pipeline `PL_Traitement_Appel_Entrant`
 
-2. Onglet **Home** → **Trigger**, puis choisir **OneLake events**.
+2. Onglet **Home** → **Trigger** → **+ Add trigger**
 
-3. Dans **Configure connection settings** :
+3. **Rule name** : `TR_test`
 
-   - **Event type(s)** : `Microsoft.Fabric.OneLake.FileCreated`
-   - **Source** : `LH_SolarVoix` dans `WS_SolarVoix`
-   - dossier sélectionné : `Files/audio_calls`
+4. **Monitor** : Select source events → **OneLake events**
 
-4. Ajouter les deux filtres suivants :
+5. **Select event type(s)** → `Microsoft.Fabric.OneLake.FileCreated`
 
-   | Field      | Operator         | Value                |
-   | ---------- | ---------------- | -------------------- |
-   | `subject`  | String contains  | `Files/audio_calls/` |
-   | `data.url` | String ends with | `.txt`               |
+6. **Add a OneLake source** → sélectionner `LH_SolarVoix`
 
-5. Cliquer **Next**, contrôler la page **Review + connect**, puis cliquer **Finish**.
+7. **Set filters** — ajouter les deux filtres suivants via **+ Filter** :
+   
+   | Field      | Operator         | Value          |
+   | ---------- | ---------------- | -------------- |
+   | `data.url` | String contains  | `audio_calls/` |
+   | `data.url` | String ends with | `.txt`         |
+   
+   > 💡 Le premier filtre cible uniquement le dossier `audio_calls/`. Le second garantit que le trigger ne se déclenche que sur des fichiers `.txt` (pas sur des créations de dossiers ou d'autres types de fichiers).
 
-6. Dans le panneau **Add rule** :
+8. Cliquer **OK** puis **Save** le Pipeline
 
-   - **Rule name** : `TR_test`
-   - **Check** : `On each event`
-   - **Select action** : `Run Pipeline`
-   - **Fabric item** : `PL_Traitement_Appel_Entrant`
-   - conserver les paramètres événementiels automatiques `Type`, `Subject` et `Source`
-   - ajouter le paramètre `fichier_entrant`, type `String`, valeur `AUTO`
-
-7. Dans **Save location** :
-
-   - **Workspace** : `WS_SolarVoix`
-   - **Item** : `Create a new item`
-   - **New item name** : `ACT_SolarVoix_Appels`
-
-8. Cliquer **Create**, puis vérifier dans le panneau **Rules** que `TR_test` est en état **Running**.
-
-> 💡 Le bouton **Create** reste désactivé tant que le champ obligatoire **Rule name** n'est pas renseigné. L'élément `ACT_SolarVoix_Appels` est le conteneur Activator ; `TR_test` est la règle qu'il héberge.
-
-> ⚠️ Un dépôt OneLake peut produire plus d'un événement `FileCreated` pendant la création ou la finalisation du même fichier. Les `MERGE` sur `call_id` rendent ici Silver et `alertes_critiques` idempotentes : plusieurs exécutions ne créent pas de doublons métier.
+> ⚠️ Ce trigger se déclenche à chaque nouveau fichier `.txt` créé dans `Files/audio_calls/`. Le Notebook détecte automatiquement lequel traiter via la comparaison dossier vs Silver.
 
 #### 3.2 — Modifier le Notebook pour la détection automatique des nouveaux fichiers
 
-La séparation décrite aux sections **1.3** et **1.3 bis** est obligatoire :
+Remplace la ****Cellule 1** du Notebook `NB_Traitement_Incremental` par le code suivant :
 
-1. la cellule marquée **Parameters** déclare seulement `call_file_path = "AUTO"` ;
-2. Fabric insère ensuite une cellule de surcharge lors de l'appel par le Pipeline ;
-3. la cellule normale suivante résout `AUTO` ou conserve le chemin explicite injecté.
+```python
+# === CELLULE 1 : Paramètre + Détection automatique des nouveaux fichiers ===
+#
+# OBJECTIF : Garder la compatibilité avec les tests manuels ET permettre 
+#            la détection automatique quand le Notebook est appelé par le Pipeline planifié.
 
-Pour un test manuel ciblé, saisissez `Files/audio_calls/CALL_0001.txt` dans la fenêtre **Pipeline run**. Le test validé affiche alors `Chemin explicite reçu du Pipeline` et suit la branche normale avec un score de `15`.
+# Valeur par défaut pour tests manuels du Notebook
+call_file_path = "Files/audio_calls/CALL_0001.txt"
+
+try:
+    # === Détection automatique des nouveaux fichiers ===
+    fichiers_dossier = mssparkutils.fs.ls("Files/audio_calls/")
+    ids_dossier = {
+        f.name.replace(".txt", "")
+        for f in fichiers_dossier
+        if f.name.endswith(".txt")
+    }
+
+    # call_ids déjà traités dans silver_appels_enrichis
+    df_silver = spark.table("silver_appels_enrichis")
+    ids_silver = {row.call_id for row in df_silver.select("call_id").collect()}
+
+    nouveaux_ids = ids_dossier - ids_silver
+
+    print(f"📊 Fichiers présents dans audio_calls : {len(ids_dossier)}")
+    print(f"📊 Appels déjà traités dans Silver    : {len(ids_silver)}")
+    print(f"📊 Nouveaux appels à traiter          : {len(nouveaux_ids)}")
+
+    if nouveaux_ids:
+        # On prend le plus ancien (tri alphabétique)
+        call_id_temp = sorted(nouveaux_ids)[0]
+        call_file_path = f"Files/audio_calls/{call_id_temp}.txt"
+        print(f"🚀 Nouveau fichier détecté automatiquement → {call_file_path}")
+    else:
+        print("✅ Aucun nouveau fichier détecté. Utilisation de la valeur par défaut pour test manuel.")
+
+except Exception as e:
+    print(f"⚠️ Erreur lors de la détection automatique : {e}")
+    print("→ Utilisation de la valeur par défaut du paramètre.")
+
+print(f"Paramètre final utilisé : call_file_path = {call_file_path}")
+```
 
 ### Ordre d’exécution pour le test (le plus efficace) :
 
-1. Mettre à jour `NB_Traitement_Incremental` avec la cellule `AUTO`, puis mettre la valeur par défaut du paramètre Pipeline `fichier_entrant` à `AUTO`.
-2. Dans `Test_Simulation_Appel_Critique`, exécuter uniquement la cellule d'initialisation de `alertes_critiques`.
-3. Configurer, enregistrer et activer le déclencheur OneLake Events.
-4. Exécuter ensuite la cellule de simulation qui crée `CALL_0121.txt`. La création du fichier constitue l'événement qui doit déclencher automatiquement le Pipeline.
-5. Pour un test manuel indépendant du déclencheur, lancez le Pipeline en fournissant explicitement `Files/audio_calls/CALL_0001.txt` ou un autre chemin existant.
+1. **D’abord** : Exécute le Notebook de test (`Test_Simulation_Appel_Critique`)
+   → Cela crée le fichier `CALL_0121.txt` dans le dossier `Files/audio_calls/`
+
+2. **Ensuite** : Tu as deux possibilités :
+   
+   - **Option rapide (recommandée pour tester maintenant)** :  
+     Va dans ton Pipeline `PL_Traitement_Appel_Entrant` → clique sur **Debug**  
+     → Lance l’exécution manuelle du Pipeline.
+   
+   - **Option automatique** :  
+     Dépose un nouveau fichier dans `Files/audio_calls/` → le trigger OneLake Events déclenche le Pipeline automatiquement.
 
 ---
 
 ### 3.4 — Test de bout en bout
 
 1. **Créer un Notebook dédié au test** :
-
+   
    - Workspace → **+ New item** → **Notebook**
    - Nom : `Test_Simulation_Appel_Critique`
    - Attacher le Lakehouse `LH_SolarVoix`
 
 2. **Étape 0 — Initialiser la table `alertes_critiques`** (à exécuter en premier) :
-
+   
    > Cette cellule crée la table vide si elle n’existe pas encore, ce qui évite l’erreur `Invalid object name` lors des vérifications SQL ultérieures.
 
 ```python
@@ -596,9 +581,12 @@ from datetime import datetime
 
 schema_alertes = StructType([
     StructField("call_id",             StringType(),    True),
+    StructField("client_id",           StringType(),    True),
+    StructField("produit",             StringType(),    True),
     StructField("score_risque_churn",  IntegerType(),   True),
     StructField("sentiment_ia",        StringType(),    True),
     StructField("intent_detecte",      StringType(),    True),
+    StructField("resume_appel",        StringType(),    True),
     StructField("statut",              StringType(),    True),
     StructField("date_alerte",         TimestampType(), True),
 ])
@@ -624,94 +612,20 @@ pour la troisième fois ce mois-ci. J’ai des enfants en bas âge et il fait fr
 J’ai contacté votre SAV cinq fois sans résultat. Je vais résilier mon contrat dès demain
 et contacter mon avocat. C’est inadmissible et je veux un remboursement complet."""
 
-chemin_test = "Files/audio_calls/CALL_0121.txt"
-
-if mssparkutils.fs.exists(chemin_test):
-    raise RuntimeError(
-        f"{chemin_test} existe déjà. Supprimez-le ou choisissez un nouvel identifiant "
-        "avant de tester un événement FileCreated."
-    )
-
-mssparkutils.fs.put(chemin_test, texte_critique, overwrite=False)
+mssparkutils.fs.put(
+    "Files/audio_calls/CALL_0121.txt",
+    texte_critique,
+    overwrite=True
+)
 
 print("✅ Fichier CALL_0121.txt créé dans audio_calls/")
 ```
 
-4. **Ne pas réexécuter la cellule de création.** Attendre quelques minutes, puis ouvrir **Monitor**. Une ou plusieurs exécutions automatiques de `PL_Traitement_Appel_Entrant` doivent apparaître.
-
-5. **Ajouter une cellule de vérification** :
-
-```python
-# === VÉRIFICATION DU TRAITEMENT ÉVÉNEMENTIEL ===
-
-call_id_test = "CALL_0121"
-
-df_silver_test = (
-    spark.table("silver_appels_enrichis")
-    .filter(f"call_id = '{call_id_test}'")
-)
-
-df_alerte_test = (
-    spark.table("alertes_critiques")
-    .filter(f"call_id = '{call_id_test}'")
-)
-
-nb_silver = df_silver_test.count()
-nb_alertes = df_alerte_test.count()
-
-print(f"Lignes Silver pour {call_id_test} : {nb_silver}")
-print(f"Alertes pour {call_id_test}       : {nb_alertes}")
-
-print("\n=== ENREGISTREMENT SILVER ===")
-display(df_silver_test)
-
-print("\n=== ALERTE CRITIQUE ===")
-display(df_alerte_test)
-
-if nb_silver != 1:
-    raise AssertionError(
-        f"Une seule ligne Silver était attendue, résultat : {nb_silver}"
-    )
-
-if nb_alertes != 1:
-    raise AssertionError(
-        f"Une seule alerte était attendue, résultat : {nb_alertes}"
-    )
-
-alerte = df_alerte_test.first()
-
-if alerte.score_risque_churn < 50:
-    raise AssertionError(
-        f"Le score d'alerte est insuffisant : {alerte.score_risque_churn}"
-    )
-
-print(
-    f"\n✅ Validation réussie : {call_id_test} a été traité "
-    f"une seule fois dans chaque table avec un score de "
-    f"{alerte.score_risque_churn}/100."
-)
-```
-
-### Résultats réellement validés
-
-| Contrôle | Résultat observé |
-|---|---:|
-| Exécutions automatiques du Pipeline | 2, toutes deux `Succeeded` |
-| Lignes Silver pour `CALL_0121` | 1 |
-| Alertes pour `CALL_0121` | 1 |
-| Sentiment IA | `negatif` |
-| Intention détectée | `resiliation` |
-| Score de risque churn | `100/100` |
-| Statut de l'alerte | `NON_TRAITEE` |
-
-> Les colonnes métier telles que `client_nom`, `ville` ou `produit` restent nulles pour `CALL_0121`, car le test crée uniquement un fichier texte et aucune ligne correspondante dans les métadonnées initiales.
-
----
+--
 
 **Résumé simple :**
 
 1. Exécuter la cellule **Étape 0** → la table `alertes_critiques` est garantie d’exister
-2. Vérifier que `TR_test` est **Running**
-3. Exécuter une seule fois le script de simulation → `CALL_0121.txt` est créé
-4. Le Pipeline est déclenché automatiquement → traitement + écriture de l'alerte
-5. Exécuter la cellule de vérification → une ligne Silver et une alerte critique
+2. Exécuter le script de simulation → fichier `CALL_0121.txt` créé
+3. Lancer le Pipeline → traitement + écriture alerte
+4. Vérifier via `spark.sql()` ou SQL endpoint

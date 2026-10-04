@@ -1,0 +1,95 @@
+{
+  "name": "PL_Traitement_Appel_Entrant",
+  "objectId": "0b9a35e9-89fa-496e-8f6b-7e34475be40f",
+  "properties": {
+    "description": "Traite un fichier d'appel entrant, met à jour la table Silver et journalise le statut d'alerte.",
+    "activities": [
+      {
+        "name": "ACT_Analyser_Appel",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "95152f88-d5b6-450b-8efe-2c835736a4be",
+          "workspaceId": "dd12ebb3-83b2-402d-a6f6-e747f9576cf9",
+          "notebookParameters": {
+            "call_file_path": {
+              "value": {
+                "value": "@pipeline().parameters.fichier_entrant",
+                "type": "Expression"
+              },
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "ACT_Condition_Alerte",
+        "type": "IfCondition",
+        "dependsOn": [
+          {
+            "activity": "ACT_Analyser_Appel",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "expression": {
+            "value": "@greaterOrEquals(int(json(activity('ACT_Analyser_Appel').output.result.exitValue).score), 50)",
+            "type": "Expression"
+          },
+          "ifTrueActivities": [
+            {
+              "name": "ACT_Log_Alerte",
+              "type": "SetVariable",
+              "dependsOn": [],
+              "typeProperties": {
+                "variableName": "statut_traitement",
+                "value": {
+                  "value": "@concat('ALERTE CRITIQUE — ', json(activity('ACT_Analyser_Appel').output.result.exitValue).fichier, ' — Score: ', string(json(activity('ACT_Analyser_Appel').output.result.exitValue).score), '/100')",
+                  "type": "Expression"
+                }
+              }
+            }
+          ],
+          "ifFalseActivities": [
+            {
+              "name": "ACT_Log_Normal",
+              "type": "SetVariable",
+              "dependsOn": [],
+              "typeProperties": {
+                "variableName": "statut_traitement",
+                "value": {
+                  "value": "@concat('OK — ', json(activity('ACT_Analyser_Appel').output.result.exitValue).fichier, ' traité sans alerte')",
+                  "type": "Expression"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "parameters": {
+      "fichier_entrant": {
+        "type": "string",
+        "defaultValue": "AUTO"
+      }
+    },
+    "variables": {
+      "statut_traitement": {
+        "type": "String",
+        "defaultValue": ""
+      }
+    },
+    "annotations": [],
+    "lastModifiedByObjectId": "b20e7edf-9543-41ea-bcb9-becec1babb14",
+    "lastPublishTime": "2026-10-04T17:34:54Z"
+  }
+}
