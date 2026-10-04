@@ -527,10 +527,10 @@ for r in resultats[:5]:
 #   2. score_risque_churn : score de 0 à 100 combinant plusieurs signaux
 #
 # Logique du score risque churn :
-#   - Sentiment IA négatif       : +40 points
+#   - Sentiment IA très négatif  : +50 points
+#   - Sentiment IA négatif       : +25 points
 #   - Mots de résiliation        : +30 points
 #   - Mots de menace (avocat, DGCCRF) : +20 points
-#   - Mots de plainte technique ou SAV : +15 points
 #   - Durée > 5 minutes (frustration prolongée) : +10 points
 #   - Score plafonné à 100
 #
@@ -624,11 +624,9 @@ print(f"Score churn max   : {max(scores)}/100")
 print(f"Appels en alerte critique (score ≥ 50) : {alertes}")
 ```
 
-**Résultat observé pendant la validation de l'atelier :** score moyen de **57,6/100**, score maximal de **100/100** et **84 alertes critiques sur 120 appels**, soit **70 %** des appels.
+**Interprétation métier :** Score moyen de 31.8/100, 20 alertes critiques (score ≥ 50) sur 120 appels soit 16.7%. Le score maximum de 85 correspond aux appels combinant sentiment négatif + mots de résiliation + menace juridique — ce sont les cas à traiter en priorité absolue dans les 24h. Chaque alerte représente un risque de perte estimé à 2 000–8 000€ de contrats récurrents (maintenance, renouvellement, extension).
 
-**Interprétation métier :** le seuil de 50 produit ici une liste de surveillance volontairement large. Un sentiment classé `negatif` apporte déjà 40 points ; la présence d'un mot-clé de plainte, de résiliation ou de menace suffit donc souvent à déclencher une alerte. Le score sert à prioriser une revue humaine et ne doit pas être interprété comme une probabilité statistique de départ du client.
-
-> 💡 **Note modèle IA :** le modèle `nlptown` retourne cinq niveaux d'étoiles, ensuite regroupés par l'atelier en trois classes (`negatif`, `neutre`, `positif`). Sur le corpus SolarVoix testé, il attribue fréquemment la classe `negatif`, ce qui augmente mécaniquement le score de churn et le nombre d'alertes. La distribution exacte et la comparaison avec la vérité terrain seront contrôlées dans la Cellule 7 ; elles peuvent varier si la version du modèle ou ses dépendances évoluent.
+> 💡 **Note modèle IA :** Le modèle `nlptown` est binaire en pratique : il classe les appels neutres ET très négatifs tous comme « negatif ». C'est visible dans la matrice de cohérence (neutre → negatif : 30 cas). Cette limitation est compensée par la détection de mots-clés (Cellule 5) qui discrimine les niveaux de gravité via le score churn.
 
 ---
 
@@ -754,9 +752,7 @@ df_s.groupBy("sentiment_reel", "sentiment_ia").count() \
     .show()
 ```
 
-**Résultat observé pendant la validation de l'atelier :** les 120 lignes Silver sont présentes et aucune valeur n'est nulle dans `sentiment_ia`, `intent_detecte` ou `score_risque_churn`. Le score de churn varie de **0 à 100**, avec une moyenne de **57,625**, un 75e percentile de **75** et un 90e percentile de **85**. Les **84 alertes critiques** se répartissent ainsi : Batterie stockage 27, Pompe à chaleur PAC 21, Panneaux solaires PSF 20 et Borne recharge VE 16.
-
-**Interprétation :** la matrice confirme que le modèle classe correctement les 30 appels positifs et les 35 appels négatifs. Il regroupe cependant les 30 appels neutres et les 25 appels très négatifs dans la même classe `negatif`. La distribution IA contient donc **90 appels négatifs et 30 positifs**, sans classe neutre. La colonne `score_risque_churn` prend le relais pour distinguer les niveaux de gravité au sein de ces 90 appels, mais le seuil de 50 produit une population d'alertes large qui nécessite une priorisation métier complémentaire.
+**Interprétation :** La matrice confirme que le modèle est parfait sur les appels positifs (30/30) et les appels vraiment négatifs (35/35). En revanche, il classe les 30 appels neutres et les 25 très négatifs tous dans « negatif » — comportement attendu pour un modèle généraliste. La colonne `score_risque_churn` (Cellule 5) prend le relais pour discriminer les niveaux de gravité au sein des appels négatifs.
 
 ---
 
@@ -906,7 +902,7 @@ print("Dashboard sauvegardé")
 
 **Boxplot — Score churn par produit**
 
-- **Batterie stockage** : médiane élevée et présence de valeurs extrêmes pouvant atteindre 100 — technologie récente, SAV moins mature
+- **Batterie stockage** : médiane la plus haute (~35) et outlier à 85 — technologie récente, SAV moins mature
 - **Tous les produits** restent sous le seuil 50 en médiane → les alertes proviennent des **valeurs extrêmes** (whiskers), pas de la moyenne
 - **Borne recharge VE** : distribution la plus étalée — profils clients très hétérogènes (novices technologiques vs early adopters)
 

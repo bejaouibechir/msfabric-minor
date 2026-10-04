@@ -1,5 +1,3 @@
-
-
 #### Partie 2 : Pipeline automatisé + alertes sur appels critiques
 
 #### Thème : Orchestration Data Factory + Activator (Real-Time Intelligence)
@@ -447,7 +445,7 @@ mssparkutils.notebook.exit(json.dumps({
 3. Nommer : `ACT_Condition_Alerte`
 
 4. Expression :
-
+   
    ```
    @greaterOrEquals(
     int(json(activity('ACT_Analyser_Appel').output.result.exitValue).score),
@@ -466,7 +464,7 @@ mssparkutils.notebook.exit(json.dumps({
 3. Variables du Pipeline → **+ New** : nom `statut_traitement`, type `String`
 
 4. Valeur :
-
+   
    ```
    @concat('ALERTE CRITIQUE — ',
     json(activity('ACT_Analyser_Appel').output.result.exitValue).fichier,
@@ -488,7 +486,7 @@ mssparkutils.notebook.exit(json.dumps({
 3. Même variable `statut_traitement`
 
 4. Valeur :
-
+   
    ```
    @concat('OK — ',
     json(activity('ACT_Analyser_Appel').output.result.exitValue).fichier,
@@ -522,13 +520,13 @@ mssparkutils.notebook.exit(json.dumps({
 2. Onglet **Home** → **Trigger**, puis choisir **OneLake events**.
 
 3. Dans **Configure connection settings** :
-
+   
    - **Event type(s)** : `Microsoft.Fabric.OneLake.FileCreated`
    - **Source** : `LH_SolarVoix` dans `WS_SolarVoix`
    - dossier sélectionné : `Files/audio_calls`
 
 4. Ajouter les deux filtres suivants :
-
+   
    | Field      | Operator         | Value                |
    | ---------- | ---------------- | -------------------- |
    | `subject`  | String contains  | `Files/audio_calls/` |
@@ -537,7 +535,7 @@ mssparkutils.notebook.exit(json.dumps({
 5. Cliquer **Next**, contrôler la page **Review + connect**, puis cliquer **Finish**.
 
 6. Dans le panneau **Add rule** :
-
+   
    - **Rule name** : `TR_test`
    - **Check** : `On each event`
    - **Select action** : `Run Pipeline`
@@ -546,7 +544,7 @@ mssparkutils.notebook.exit(json.dumps({
    - ajouter le paramètre `fichier_entrant`, type `String`, valeur `AUTO`
 
 7. Dans **Save location** :
-
+   
    - **Workspace** : `WS_SolarVoix`
    - **Item** : `Create a new item`
    - **New item name** : `ACT_SolarVoix_Appels`
@@ -580,13 +578,13 @@ Pour un test manuel ciblé, saisissez `Files/audio_calls/CALL_0001.txt` dans la 
 ### 3.4 — Test de bout en bout
 
 1. **Créer un Notebook dédié au test** :
-
+   
    - Workspace → **+ New item** → **Notebook**
    - Nom : `Test_Simulation_Appel_Critique`
    - Attacher le Lakehouse `LH_SolarVoix`
 
 2. **Étape 0 — Initialiser la table `alertes_critiques`** (à exécuter en premier) :
-
+   
    > Cette cellule crée la table vide si elle n’existe pas encore, ce qui évite l’erreur `Invalid object name` lors des vérifications SQL ultérieures.
 
 ```python
@@ -694,15 +692,15 @@ print(
 
 ### Résultats réellement validés
 
-| Contrôle | Résultat observé |
-|---|---:|
+| Contrôle                            | Résultat observé           |
+| ----------------------------------- | --------------------------:|
 | Exécutions automatiques du Pipeline | 2, toutes deux `Succeeded` |
-| Lignes Silver pour `CALL_0121` | 1 |
-| Alertes pour `CALL_0121` | 1 |
-| Sentiment IA | `negatif` |
-| Intention détectée | `resiliation` |
-| Score de risque churn | `100/100` |
-| Statut de l'alerte | `NON_TRAITEE` |
+| Lignes Silver pour `CALL_0121`      | 1                          |
+| Alertes pour `CALL_0121`            | 1                          |
+| Sentiment IA                        | `negatif`                  |
+| Intention détectée                  | `resiliation`              |
+| Score de risque churn               | `100/100`                  |
+| Statut de l'alerte                  | `NON_TRAITEE`              |
 
 > Les colonnes métier telles que `client_nom`, `ville` ou `produit` restent nulles pour `CALL_0121`, car le test crée uniquement un fichier texte et aucune ligne correspondante dans les métadonnées initiales.
 
