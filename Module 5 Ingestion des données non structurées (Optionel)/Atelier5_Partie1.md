@@ -443,18 +443,21 @@ df_m.groupBy("sentiment_reel").count().orderBy("count", ascending=False).show()
 
 ## Bloc 4 — Enrichissement IA (sans clé API)
 
-> 💡 **Architecture IA sans dépendance externe :** On utilise `transformers` de HuggingFace avec le modèle `cardiffnlp/twitter-xlm-roberta-base-sentiment` — un modèle multilingue (français inclus) pour l'analyse de sentiment. Il est téléchargé une seule fois par le cluster, puis mis en cache. Pas de clé, pas de coût par appel.
+> 💡 **Architecture IA sans clé externe :** On utilise `transformers` avec le modèle français compact `cmarkea/distilcamembert-base-sentiment`. Le modèle est téléchargé une seule fois par la session, puis mis en cache. Aucun jeton Hugging Face n'est obligatoire pour cet atelier.
 
 ### 4.1 — Cellule 4A : Installer le moteur IA et redémarrer Python
+
+> **Pourquoi la tentative précédente a échoué ?** `transformers` avait été chargé avant que `torch` soit correctement disponible. Comme `%pip` ne réinitialisait pas cet état déjà mémorisé, `transformers` déclenchait l'erreur interne `NameError: name 'torch' is not defined`.
 
 > ⚠️ **Important :** cette installation doit être exécutée dans une cellule séparée. Le redémarrage évite que `transformers` conserve en mémoire un état où `torch` était absent.
 
 ```python
 # === CELLULE 4A : Installation des dépendances IA ===
-%pip install -q "transformers[torch]"
+%pip install -q "transformers[torch]" sentencepiece
 
 # Fabric recommande de redémarrer Python après une installation %pip.
 # Le contexte Spark et les tables Bronze restent disponibles.
+import notebookutils
 notebookutils.session.restartPython()
 ```
 
@@ -468,10 +471,10 @@ Attendre la fin du redémarrage, puis exécuter la cellule suivante. N'ajoutez a
 # OBJECTIF : Attribuer un score de sentiment (positif/neutre/négatif)
 #            à chaque transcription via un modèle de NLP pré-entraîné.
 #
-# Modèle : cardiffnlp/twitter-xlm-roberta-base-sentiment
-#   → Entraîné sur 198 millions de tweets en 100 langues dont le français
-#   → Labels : negative / neutral / positive
-#   → Taille : ~280 MB (téléchargé automatiquement au premier appel)
+# Modèle : cmarkea/distilcamembert-base-sentiment
+#   → Modèle compact spécialisé pour le français
+#   → Labels : "1 star" à "5 stars"
+#   → Poids PyTorch : environ 272 MB
 #
 # Stratégie d'exécution :
 #   - On collecte les transcriptions dans le driver (120 textes courts = OK)
@@ -481,6 +484,15 @@ Attendre la fin du redémarrage, puis exécuter la cellule suivante. N'ajoutez a
 # truncation=True, max_length=512 → les transcriptions longues sont tronquées
 # à 512 tokens (limite du modèle BERT/RoBERTa)
 
+import os
+
+# Le backend Xet peut échouer dans Fabric avec "No such comm" pendant la
+# reconstruction des gros fichiers. Le téléchargement HTTP standard est
+# plus stable pour cet atelier. Ces variables doivent précéder transformers.
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = "300"
+
 import torch
 from transformers import pipeline as hf_pipeline
 
@@ -488,13 +500,12 @@ print(f"PyTorch {torch.__version__} chargé ✅")
 
 print("Chargement du modèle de sentiment (première fois : ~1 min)...")
 
-# Modèle : nlptown/bert-base-multilingual-uncased-sentiment
-# Tokenizer BERT standard (WordPiece) — aucune dépendance sentencepiece
-# Supporte le français nativement (entraîné sur 6 langues)
-# Labels de sortie : "1 star" à "5 stars"
+MODEL_ID = "cmarkea/distilcamembert-base-sentiment"
+
 sentiment_pipeline = hf_pipeline(
-    "sentiment-analysis",
-    model="nlptown/bert-base-multilingual-uncased-sentiment",
+    "text-classification",
+    model=MODEL_ID,
+    tokenizer=MODEL_ID,
     device=-1,
     truncation=True,
     max_length=512
@@ -644,7 +655,7 @@ print(f"Appels en alerte critique (score ≥ 50) : {alertes}")
 
 **Interprétation métier :** Score moyen de 31.8/100, 20 alertes critiques (score ≥ 50) sur 120 appels soit 16.7%. Le score maximum de 85 correspond aux appels combinant sentiment négatif + mots de résiliation + menace juridique — ce sont les cas à traiter en priorité absolue dans les 24h. Chaque alerte représente un risque de perte estimé à 2 000–8 000€ de contrats récurrents (maintenance, renouvellement, extension).
 
-> 💡 **Note modèle IA :** Le modèle `nlptown` est binaire en pratique : il classe les appels neutres ET très négatifs tous comme « negatif ». C'est visible dans la matrice de cohérence (neutre → negatif : 30 cas). Cette limitation est compensée par la détection de mots-clés (Cellule 5) qui discrimine les niveaux de gravité via le score churn.
+> 💡 **Note modèle IA :** `DistilCamemBERT-Sentiment` produit cinq niveaux d'étoiles, regroupés ici en `negatif`, `neutre` et `positif`. La distribution exacte peut varier selon les textes ; le score churn de la Cellule 5 complète le modèle grâce aux mots-clés métier.
 
 ---
 
@@ -914,9 +925,9 @@ print("Dashboard sauvegardé")
 
 **Donut — Répartition des sentiments**
 
-- **75% d'appels négatifs** : le modèle absorbe les neutres dans "negatif" (comportement attendu, discuté en Cellule 7)
-- **Aucune nuance de gris** : signal qu'un modèle à 2 classes nécessite le score churn pour discriminer les niveaux de gravité
-- **25% positifs** correspondent exactement aux 30 appels de satisfaction générés — validation de cohérence
+- Comparer la distribution prédite aux sentiments de référence générés au début de l'atelier
+- Une différence entre les deux distributions est normale : le modèle travaille sur le texte et non sur le libellé de référence
+- Utiliser le score churn et les mots-clés métier pour compléter la classification du modèle
 
 **Boxplot — Score churn par produit**
 
