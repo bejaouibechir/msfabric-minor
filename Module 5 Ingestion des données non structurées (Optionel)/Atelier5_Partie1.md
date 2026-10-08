@@ -445,10 +445,25 @@ df_m.groupBy("sentiment_reel").count().orderBy("count", ascending=False).show()
 
 > 💡 **Architecture IA sans dépendance externe :** On utilise `transformers` de HuggingFace avec le modèle `cardiffnlp/twitter-xlm-roberta-base-sentiment` — un modèle multilingue (français inclus) pour l'analyse de sentiment. Il est téléchargé une seule fois par le cluster, puis mis en cache. Pas de clé, pas de coût par appel.
 
-### 4.1 — Cellule 4 : Analyse de sentiment IA
+### 4.1 — Cellule 4A : Installer le moteur IA et redémarrer Python
+
+> ⚠️ **Important :** cette installation doit être exécutée dans une cellule séparée. Le redémarrage évite que `transformers` conserve en mémoire un état où `torch` était absent.
 
 ```python
-# === CELLULE 4 : Analyse de sentiment avec HuggingFace Transformers ===
+# === CELLULE 4A : Installation des dépendances IA ===
+%pip install -q "transformers[torch]"
+
+# Fabric recommande de redémarrer Python après une installation %pip.
+# Le contexte Spark et les tables Bronze restent disponibles.
+notebookutils.session.restartPython()
+```
+
+Attendre la fin du redémarrage, puis exécuter la cellule suivante. N'ajoutez aucun autre code après `restartPython()` dans cette cellule.
+
+### 4.2 — Cellule 4B : Analyse de sentiment IA
+
+```python
+# === CELLULE 4B : Analyse de sentiment avec HuggingFace Transformers ===
 #
 # OBJECTIF : Attribuer un score de sentiment (positif/neutre/négatif)
 #            à chaque transcription via un modèle de NLP pré-entraîné.
@@ -466,7 +481,10 @@ df_m.groupBy("sentiment_reel").count().orderBy("count", ascending=False).show()
 # truncation=True, max_length=512 → les transcriptions longues sont tronquées
 # à 512 tokens (limite du modèle BERT/RoBERTa)
 
+import torch
 from transformers import pipeline as hf_pipeline
+
+print(f"PyTorch {torch.__version__} chargé ✅")
 
 print("Chargement du modèle de sentiment (première fois : ~1 min)...")
 
@@ -516,7 +534,7 @@ for r in resultats[:5]:
     print(f"  {r['call_id']} → {r['sentiment_ia']} (confiance: {r['score_sentiment']})")
 ```
 
-### 4.2 — Cellule 5 : Détection d'intention et score de risque churn
+### 4.3 — Cellule 5 : Détection d'intention et score de risque churn
 
 ```python
 # === CELLULE 5 : Détection d'intention par règles + calcul du score churn ===
