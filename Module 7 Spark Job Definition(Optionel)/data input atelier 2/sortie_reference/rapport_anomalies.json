@@ -1,0 +1,57 @@
+{
+  "parametres": {
+    "lots": 5,
+    "lignes_par_lot": 200,
+    "seed": 20251002,
+    "intervalle": 0.0
+  },
+  "lots": [
+    {
+      "fichier": "mesures_20250201T000000Z_lot001.jsonl",
+      "lignes": 200,
+      "nulls": 10,
+      "valeurs_hors_plage": 11,
+      "doublons": 7,
+      "timestamps_heterogenes": 11
+    },
+    {
+      "fichier": "mesures_20250201T010000Z_lot002.jsonl",
+      "lignes": 200,
+      "nulls": 10,
+      "valeurs_hors_plage": 11,
+      "doublons": 7,
+      "timestamps_heterogenes": 11
+    },
+    {
+      "fichier": "mesures_20250201T020000Z_lot003.jsonl",
+      "lignes": 200,
+      "nulls": 10,
+      "valeurs_hors_plage": 11,
+      "doublons": 7,
+      "timestamps_heterogenes": 11
+    },
+    {
+      "fichier": "mesures_20250201T030000Z_lot004.jsonl",
+      "lignes": 200,
+      "nulls": 10,
+      "valeurs_hors_plage": 11,
+      "doublons": 7,
+      "timestamps_heterogenes": 11
+    },
+    {
+      "fichier": "mesures_20250201T040000Z_lot005.jsonl",
+      "lignes": 200,
+      "nulls": 10,
+      "valeurs_hors_plage": 11,
+      "doublons": 7,
+      "timestamps_heterogenes": 11
+    }
+  ],
+  "totaux": {
+    "lignes": 1000,
+    "nulls": 50,
+    "valeurs_hors_plage": 55,
+    "doublons": 35,
+    "timestamps_heterogenes": 55
+  }
+}
