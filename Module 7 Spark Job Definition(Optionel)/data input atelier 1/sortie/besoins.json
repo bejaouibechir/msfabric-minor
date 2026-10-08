@@ -1,0 +1,212 @@
+[
+  {
+    "Timestamp": "2025-01-01T00:00:00",
+    "Zone": "Atelier_A",
+    "Consommation_kWh": 245.67,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 52.34
+  },
+  {
+    "Timestamp": "2025-01-01T01:00:00",
+    "Zone": "Bureaux",
+    "Consommation_kWh": 89.23,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 18.92
+  },
+  {
+    "Timestamp": "2025-01-01T02:00:00",
+    "Zone": "Atelier_B",
+    "Consommation_kWh": 312.45,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 66.54
+  },
+  {
+    "Timestamp": "2025-01-01T03:00:00",
+    "Zone": "Entrepot",
+    "Consommation_kWh": 156.78,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 33.21
+  },
+  {
+    "Timestamp": "2025-01-01T04:00:00",
+    "Zone": "Atelier_A",
+    "Consommation_kWh": 289.34,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 61.45
+  },
+  {
+    "Timestamp": "2025-01-01T05:00:00",
+    "Zone": "Atelier_B",
+    "Consommation_kWh": 378.92,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 80.56
+  },
+  {
+    "Timestamp": "2025-01-01T06:00:00",
+    "Zone": "Bureaux",
+    "Consommation_kWh": 134.56,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 28.67
+  },
+  {
+    "Timestamp": "2025-01-01T07:00:00",
+    "Zone": "Atelier_A",
+    "Consommation_kWh": 423.12,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 89.87
+  },
+  {
+    "Timestamp": "2025-01-01T08:00:00",
+    "Zone": "Entrepot",
+    "Consommation_kWh": 201.45,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 42.78
+  },
+  {
+    "Timestamp": "2025-01-01T09:00:00",
+    "Zone": "Atelier_B",
+    "Consommation_kWh": 456.78,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 97.12
+  },
+  {
+    "Timestamp": "2025-01-01T10:00:00",
+    "Zone": "Bureaux",
+    "Consommation_kWh": 167.89,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 35.67
+  },
+  {
+    "Timestamp": "2025-01-01T11:00:00",
+    "Zone": "Atelier_A",
+    "Consommation_kWh": 389.23,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 82.78
+  },
+  {
+    "Timestamp": "2025-01-01T12:00:00",
+    "Zone": "Atelier_B",
+    "Consommation_kWh": 412.56,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 87.65
+  },
+  {
+    "Timestamp": "2025-01-01T13:00:00",
+    "Zone": "Entrepot",
+    "Consommation_kWh": 178.34,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 37.89
+  },
+  {
+    "Timestamp": "2025-01-01T14:00:00",
+    "Zone": "Bureaux",
+    "Consommation_kWh": 145.67,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 30.98
+  },
+  {
+    "Timestamp": "2025-01-01T15:00:00",
+    "Zone": "Atelier_A",
+    "Consommation_kWh": 367.89,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 78.23
+  },
+  {
+    "Timestamp": "2025-01-01T16:00:00",
+    "Zone": "Atelier_B",
+    "Consommation_kWh": 398.45,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 84.67
+  },
+  {
+    "Timestamp": "2025-01-01T17:00:00",
+    "Zone": "Entrepot",
+    "Consommation_kWh": 189.56,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 40.23
+  },
+  {
+    "Timestamp": "2025-01-01T18:00:00",
+    "Zone": "Bureaux",
+    "Consommation_kWh": 112.34,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 23.87
+  },
+  {
+    "Timestamp": "2025-01-01T19:00:00",
+    "Zone": "Atelier_A",
+    "Consommation_kWh": 334.67,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 71.12
+  },
+  {
+    "Timestamp": "2025-01-01T20:00:00",
+    "Zone": "Atelier_B",
+    "Consommation_kWh": 356.89,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 75.89
+  },
+  {
+    "Timestamp": "2025-01-01T21:00:00",
+    "Zone": "Entrepot",
+    "Consommation_kWh": 167.23,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 35.54
+  },
+  {
+    "Timestamp": "2025-01-01T22:00:00",
+    "Zone": "Bureaux",
+    "Consommation_kWh": 98.45,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 20.92
+  },
+  {
+    "Timestamp": "2025-01-01T23:00:00",
+    "Zone": "Atelier_A",
+    "Consommation_kWh": 278.9,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 59.28
+  },
+  {
+    "Timestamp": "2025-01-02T00:00:00",
+    "Zone": "Atelier_B",
+    "Consommation_kWh": 312.45,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 66.43
+  },
+  {
+    "Timestamp": "2025-01-02T01:00:00",
+    "Zone": "Entrepot",
+    "Consommation_kWh": 145.67,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 30.95
+  },
+  {
+    "Timestamp": "2025-01-02T02:00:00",
+    "Zone": "Bureaux",
+    "Consommation_kWh": 87.34,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 18.56
+  },
+  {
+    "Timestamp": "2025-01-02T03:00:00",
+    "Zone": "Atelier_A",
+    "Consommation_kWh": 267.89,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 56.94
+  },
+  {
+    "Timestamp": "2025-01-02T04:00:00",
+    "Zone": "Atelier_B",
+    "Consommation_kWh": 334.56,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 71.12
+  },
+  {
+    "Timestamp": "2025-01-02T05:00:00",
+    "Zone": "Entrepot",
+    "Consommation_kWh": 178.23,
+    "Type_Energie": "Fossile",
+    "Cout_Euro": 37.87
+  }
+]
