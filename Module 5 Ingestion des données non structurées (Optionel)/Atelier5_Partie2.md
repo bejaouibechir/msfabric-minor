@@ -275,7 +275,8 @@ def enrichir_appel(call_id: str, texte: str, duree_sec: int = 180) -> dict:
     Retourne un dictionnaire prêt pour la table silver_appels_enrichis.
     """
     # Sentiment IA
-    sentiment_ia = modele_sentiment.predict([texte])[0]
+    # Conversion explicite de numpy.str_ vers str Python pour Spark.
+    sentiment_ia = str(modele_sentiment.predict([texte])[0])
     probabilites = modele_sentiment.predict_proba([texte])[0]
     score_sentiment = round(float(max(probabilites)), 4)
 
@@ -362,18 +363,32 @@ for k, v in resultat.items():
 # et json(...).fichier pour identifier le fichier dans les logs Monitor.
 
 from datetime import datetime
-from pyspark.sql import Row
+from pyspark.sql.types import (
+    StructType, StructField, StringType, DoubleType,
+    IntegerType, BooleanType, TimestampType,
+)
 
-# Création d'un DataFrame temporaire avec le résultat
-df_nouveau = spark.createDataFrame([Row(
-    call_id           = resultat["call_id"],
-    sentiment_ia      = resultat["sentiment_ia"],
-    score_sentiment   = float(resultat["score_sentiment"]),
-    intent_detecte    = resultat["intent_detecte"],
-    score_risque_churn= int(resultat["score_risque_churn"]),
-    alerte_critique   = bool(resultat["alerte_critique"]),
-    date_mise_a_jour  = datetime.now(),
-)])
+# Schéma explicite : évite l'inférence de types lors d'un appel Pipeline.
+schema_nouveau = StructType([
+    StructField("call_id", StringType(), False),
+    StructField("sentiment_ia", StringType(), False),
+    StructField("score_sentiment", DoubleType(), False),
+    StructField("intent_detecte", StringType(), False),
+    StructField("score_risque_churn", IntegerType(), False),
+    StructField("alerte_critique", BooleanType(), False),
+    StructField("date_mise_a_jour", TimestampType(), False),
+])
+
+ligne_nouvelle = (
+    str(resultat["call_id"]),
+    str(resultat["sentiment_ia"]),
+    float(resultat["score_sentiment"]),
+    str(resultat["intent_detecte"]),
+    int(resultat["score_risque_churn"]),
+    bool(resultat["alerte_critique"]),
+    datetime.now(),
+)
+df_nouveau = spark.createDataFrame([ligne_nouvelle], schema=schema_nouveau)
 df_nouveau.createOrReplaceTempView("staging_appel")
 
 # MERGE INTO : UPSERT sur call_id
