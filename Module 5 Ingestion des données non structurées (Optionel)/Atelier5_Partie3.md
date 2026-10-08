@@ -1285,6 +1285,6 @@ plt.show()
 
 | Partie       | Durée   | Outils                                        | Livrables                             |
 | ------------ | ------- | --------------------------------------------- | ------------------------------------- |
-| **Partie 1** | ~60 min | Lakehouse, Notebook PySpark, Transformers     | Tables Bronze + Silver enrichies      |
+| **Partie 1** | ~60 min | Lakehouse, Notebook PySpark, modèle NLP local | Tables Bronze + Silver enrichies      |
 | **Partie 2** | ~60 min | Pipeline Data Factory, Eventstream, Activator | Pipeline automatisé, alertes, logging |
 | **Partie 3** | ~12     |                                               |                                       |

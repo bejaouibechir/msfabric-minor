@@ -48,9 +48,11 @@ Nouveau fichier .txt dans Files/audio_calls/
 2. Nommer : `NB_Traitement_Incremental`
 3. Ajouter `LH_SolarVoix`
 
+> ✅ **Modèle autonome :** le notebook charge `sentiment_tfidf.joblib` depuis OneLake. S'il n'existe pas encore, il l'entraîne automatiquement à partir des tables `bronze_transcriptions` et `bronze_calls_metadata`. Aucun téléchargement Hugging Face ou PyTorch n'est nécessaire.
+
 ### 1.2 — Installation des dépendances
 
-Ajoutez cette cellule une seule fois au début du Notebook. Elle installe les trois packages nécessaires dans la session Spark sans dupliquer l'installation plus loin dans le Notebook.
+Ajoutez cette cellule une seule fois au début du Notebook. Elle installe les bibliothèques ML légères nécessaires puis redémarre l'interpréteur Python.
 
 ```python
 # === CELLULE 0 : Installation des dépendances ===
@@ -58,14 +60,21 @@ Ajoutez cette cellule une seule fois au début du Notebook. Elle installe les tr
 import subprocess
 import sys
 
-packages = ["transformers", "torch", "sentencepiece"]
+packages = ["scikit-learn", "joblib"]
 subprocess.run(
     [sys.executable, "-m", "pip", "install", "--quiet", *packages],
     check=True,
 )
 
 print("✅ Packages installés avec succès")
+
+# Le redémarrage rend les packages nouvellement installés disponibles.
+# Aucun autre code ne doit être placé après cette instruction dans la cellule.
+import notebookutils
+notebookutils.session.restartPython()
 ```
+
+> 💡 Ce notebook n'utilise plus `transformers`, PyTorch ou Hugging Face. Le modèle léger est chargé directement depuis OneLake.
 
 ### 1.3 — Cellule 1 : Déclaration du paramètre
 
@@ -89,6 +98,8 @@ Insérez immédiatement après la cellule `Parameters` une cellule de code norma
 
 ```python
 # === CELLULE 1 BIS : Résolution du fichier à traiter ===
+
+from notebookutils import mssparkutils
 
 if call_file_path == "AUTO":
     try:
@@ -171,7 +182,8 @@ print(f"call_id extrait : {call_id}")
 ```python
 # === CELLULE 3 : Traitement d'un seul appel (Version corrigée) ===
 
-from transformers import pipeline as hf_pipeline
+from pathlib import Path
+import joblib
 import pyspark.sql.functions as F
 
 # ====================== VARIABLES PAR DÉFAUT ======================
@@ -201,24 +213,60 @@ try:
 except Exception as e:
     raise FileNotFoundError(f"Impossible de lire le fichier {call_file_path} : {e}") from e
 
-# ====================== CHARGEMENT DU MODÈLE ======================
-print("Chargement du modèle de sentiment (nlptown/bert-base-multilingual-uncased-sentiment)...")
-sentiment_pipeline = hf_pipeline(
-    "sentiment-analysis",
-    model="nlptown/bert-base-multilingual-uncased-sentiment",
-    device=-1,          # CPU
-    truncation=True,
-    max_length=512
-)
+# ====================== CHARGEMENT / CRÉATION DU MODÈLE ======================
+MODEL_PATH = "/lakehouse/default/Files/models/sentiment_tfidf.joblib"
 
-def mapper_sentiment(label: str) -> str:
-    nb = int(label[0])
-    if nb <= 2:
-        return "negatif"
-    elif nb == 3:
+if not Path(MODEL_PATH).exists():
+    print("Modèle absent : entraînement local automatique depuis les tables Bronze...")
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
+
+    tables_requises = {"bronze_transcriptions", "bronze_calls_metadata"}
+    tables_absentes = [t for t in tables_requises if not spark.catalog.tableExists(t)]
+    if tables_absentes:
+        raise RuntimeError(
+            "Impossible de créer le modèle : tables Bronze absentes : "
+            + ", ".join(sorted(tables_absentes))
+        )
+
+    df_entrainement = (
+        spark.table("bronze_transcriptions").alias("t")
+        .join(spark.table("bronze_calls_metadata").alias("m"), "call_id")
+        .select("transcription_text", "sentiment_reel")
+        .dropna()
+    )
+    lignes_entrainement = df_entrainement.collect()
+    if not lignes_entrainement:
+        raise RuntimeError("Impossible de créer le modèle : aucune donnée Bronze étiquetée.")
+
+    def normaliser_label(label: str) -> str:
+        if label in {"tres_negatif", "negatif"}:
+            return "negatif"
+        if label == "positif":
+            return "positif"
         return "neutre"
-    else:
-        return "positif"
+
+    textes_entrainement = [r.transcription_text for r in lignes_entrainement]
+    labels_entrainement = [normaliser_label(r.sentiment_reel) for r in lignes_entrainement]
+    if len(set(labels_entrainement)) < 2:
+        raise RuntimeError("Impossible de créer le modèle : au moins deux classes sont nécessaires.")
+
+    modele_sentiment = Pipeline([
+        ("tfidf", TfidfVectorizer(
+            lowercase=True, strip_accents="unicode", ngram_range=(1, 2), min_df=1
+        )),
+        ("classifier", LogisticRegression(
+            max_iter=1000, class_weight="balanced", random_state=42
+        )),
+    ])
+    modele_sentiment.fit(textes_entrainement, labels_entrainement)
+    Path(MODEL_PATH).parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(modele_sentiment, MODEL_PATH)
+    print(f"Modèle local entraîné et sauvegardé : {MODEL_PATH}")
+else:
+    print(f"Chargement du modèle local depuis OneLake : {MODEL_PATH}")
+    modele_sentiment = joblib.load(MODEL_PATH)
 
 # ====================== FONCTION PRINCIPALE ======================
 def enrichir_appel(call_id: str, texte: str, duree_sec: int = 180) -> dict:
@@ -227,9 +275,9 @@ def enrichir_appel(call_id: str, texte: str, duree_sec: int = 180) -> dict:
     Retourne un dictionnaire prêt pour la table silver_appels_enrichis.
     """
     # Sentiment IA
-    res = sentiment_pipeline([texte], batch_size=1)[0]
-    sentiment_ia = mapper_sentiment(res["label"])
-    score_sentiment = round(res["score"], 4)
+    sentiment_ia = modele_sentiment.predict([texte])[0]
+    probabilites = modele_sentiment.predict_proba([texte])[0]
+    score_sentiment = round(float(max(probabilites)), 4)
 
     # Détection d'intention (mots-clés)
     KEYWORDS_INTENT = {

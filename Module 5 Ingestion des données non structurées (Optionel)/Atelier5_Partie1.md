@@ -19,7 +19,7 @@ Fichiers audio (MP3 synthétiques)
         ↓
   Lakehouse Bronze  ← ingestion brute
         ↓
-  Notebook PySpark + Analyse IA (transformers, sans clé API)
+  Notebook PySpark + modèle NLP local (sans clé API)
         ↓
   Lakehouse Silver  ← transcriptions + scores enrichis
         ↓
@@ -28,7 +28,7 @@ Fichiers audio (MP3 synthétiques)
   Modèle sémantique + Rapport Power BI Fabric (Partie 3)
 ```
 
-> 💡 **Choix pédagogique :** Cet atelier n'utilise **aucune clé Azure payante**. La transcription et l'analyse IA s'appuient sur des bibliothèques open-source (`transformers`, `pipeline` HuggingFace). Vous pouvez rejouer l'atelier indéfiniment sans dépendance externe.
+> 💡 **Choix pédagogique :** Cet atelier n'utilise **aucune clé Azure payante**. L'analyse s'appuie sur un modèle NLP local TF-IDF + régression logistique, entraîné avec les données synthétiques de l'atelier puis conservé dans OneLake.
 
 ---
 
@@ -41,7 +41,7 @@ Fichiers audio (MP3 synthétiques)
 | Notebook 1       | `NB_Generation_Donnees`                                           |
 | Notebook 2       | `NB_Bronze_to_Silver`                                             |
 | Notebook 3       | `NB_Visualisations`                                               |
-| Bibliothèques    | `transformers`, `torch`, `pydub`, `faker` (installables via %pip) |
+| Bibliothèques    | `scikit-learn`, `joblib`, `pydub`, `faker` (installables via %pip) |
 
 ---
 
@@ -94,12 +94,11 @@ Fichiers audio (MP3 synthétiques)
 #
 # faker    → génère des noms, villes, dates aléatoires réalistes
 # pydub    → manipulation audio (création de fichiers WAV/MP3 vides)
-# transformers → modèles HuggingFace pour sentiment sans clé API
-# torch    → requis par transformers (backend de calcul)
+# scikit-learn et joblib seront installés plus tard dans le notebook d'analyse
 
 
 import subprocess, sys
-pkgs = ["faker", "pydub", "transformers", "torch", "sentencepiece"]
+pkgs = ["faker", "pydub"]
 subprocess.run([sys.executable, "-m", "pip", "install", "--quiet"] + pkgs, check=True)
 print("Installation terminée")
 ```
@@ -441,106 +440,90 @@ df_m.groupBy("sentiment_reel").count().orderBy("count", ascending=False).show()
 
 ---
 
-## Bloc 4 — Enrichissement IA (sans clé API)
+## Bloc 4 — Enrichissement IA local et fiable
 
-> 💡 **Architecture IA sans clé externe :** On utilise `transformers` avec le modèle français compact `cmarkea/distilcamembert-base-sentiment`. Le modèle est téléchargé une seule fois par la session, puis mis en cache. Aucun jeton Hugging Face n'est obligatoire pour cet atelier.
+> 💡 **Architecture sans téléchargement de modèle externe :** le notebook entraîne un classifieur NLP léger avec TF-IDF et régression logistique à partir des 120 transcriptions déjà étiquetées. Il ne dépend ni de Hugging Face, ni de PyTorch, ni d'un jeton externe. Le modèle est sauvegardé dans OneLake pour le traitement incrémental.
 
-### 4.1 — Cellule 4A : Installer le moteur IA et redémarrer Python
+> ⚠️ **Contrôle de version dans Fabric :** si votre cellule contient encore `hf_pipeline`, `MODEL_ID`, `cmarkea/distilcamembert-base-sentiment` ou `nlptown/bert-base-multilingual-uncased-sentiment`, vous exécutez l'ancienne version. Supprimez cette cellule et remplacez-la par les cellules 4A et 4B ci-dessous, ou réimportez le notebook `NB_Bronze_to_Silver.ipynb` mis à jour. Une modification du fichier local ne remplace pas automatiquement un notebook déjà importé dans l'espace de travail Fabric.
 
-> **Pourquoi la tentative précédente a échoué ?** `transformers` avait été chargé avant que `torch` soit correctement disponible. Comme `%pip` ne réinitialisait pas cet état déjà mémorisé, `transformers` déclenchait l'erreur interne `NameError: name 'torch' is not defined`.
-
-> ⚠️ **Important :** cette installation doit être exécutée dans une cellule séparée. Le redémarrage évite que `transformers` conserve en mémoire un état où `torch` était absent.
+### 4.1 — Cellule 4A : Installer le moteur ML et redémarrer Python
 
 ```python
-# === CELLULE 4A : Installation des dépendances IA ===
-%pip install -q "transformers[torch]" sentencepiece
+# === CELLULE 4A : Installation des dépendances ML légères ===
+%pip install -q scikit-learn joblib
 
-# Fabric recommande de redémarrer Python après une installation %pip.
-# Le contexte Spark et les tables Bronze restent disponibles.
 import notebookutils
 notebookutils.session.restartPython()
 ```
 
-Attendre la fin du redémarrage, puis exécuter la cellule suivante. N'ajoutez aucun autre code après `restartPython()` dans cette cellule.
+Attendre la fin du redémarrage, puis exécuter la cellule suivante.
 
-### 4.2 — Cellule 4B : Analyse de sentiment IA
+### 4.2 — Cellule 4B : Entraîner et sauvegarder le modèle de sentiment
 
 ```python
-# === CELLULE 4B : Analyse de sentiment avec HuggingFace Transformers ===
-#
-# OBJECTIF : Attribuer un score de sentiment (positif/neutre/négatif)
-#            à chaque transcription via un modèle de NLP pré-entraîné.
-#
-# Modèle : cmarkea/distilcamembert-base-sentiment
-#   → Modèle compact spécialisé pour le français
-#   → Labels : "1 star" à "5 stars"
-#   → Poids PyTorch : environ 272 MB
-#
-# Stratégie d'exécution :
-#   - On collecte les transcriptions dans le driver (120 textes courts = OK)
-#   - On applique le pipeline NLP en batch sur le driver
-#   - Pour des millions de documents, on utiliserait une UDF Spark distribuée
-#
-# truncation=True, max_length=512 → les transcriptions longues sont tronquées
-# à 512 tokens (limite du modèle BERT/RoBERTa)
+# === CELLULE 4B : Modèle local TF-IDF + régression logistique ===
 
-import os
+from pathlib import Path
+import joblib
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
 
-# Le backend Xet peut échouer dans Fabric avec "No such comm" pendant la
-# reconstruction des gros fichiers. Le téléchargement HTTP standard est
-# plus stable pour cet atelier. Ces variables doivent précéder transformers.
-os.environ["HF_HUB_DISABLE_XET"] = "1"
-os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = "300"
+MODEL_PATH = "/lakehouse/default/Files/models/sentiment_tfidf.joblib"
 
-import torch
-from transformers import pipeline as hf_pipeline
-
-print(f"PyTorch {torch.__version__} chargé ✅")
-
-print("Chargement du modèle de sentiment (première fois : ~1 min)...")
-
-MODEL_ID = "cmarkea/distilcamembert-base-sentiment"
-
-sentiment_pipeline = hf_pipeline(
-    "text-classification",
-    model=MODEL_ID,
-    tokenizer=MODEL_ID,
-    device=-1,
-    truncation=True,
-    max_length=512
+# Jointure des textes et des étiquettes générées dans les tables Bronze.
+df_entrainement = (
+    spark.table("bronze_transcriptions").alias("t")
+    .join(spark.table("bronze_calls_metadata").alias("m"), "call_id")
+    .select("call_id", "transcription_text", "sentiment_reel")
 )
 
-print("Modèle chargé ✅")
+lignes = df_entrainement.collect()
+texts = [r.transcription_text for r in lignes]
+call_ids = [r.call_id for r in lignes]
 
-rows = spark.table("bronze_transcriptions").collect()
-texts = [r.transcription_text for r in rows]
-call_ids = [r.call_id for r in rows]
-
-resultats_sentiment = sentiment_pipeline(texts, batch_size=16)
-
-# Mapping : 1-2 étoiles → negatif | 3 étoiles → neutre | 4-5 étoiles → positif
-def mapper_sentiment(label: str) -> str:
-    nb = int(label[0])
-    if nb <= 2:
+def normaliser_label(label: str) -> str:
+    if label in {"tres_negatif", "negatif"}:
         return "negatif"
-    elif nb == 3:
-        return "neutre"
-    else:
+    if label == "positif":
         return "positif"
+    return "neutre"
+
+labels = [normaliser_label(r.sentiment_reel) for r in lignes]
+
+modele_sentiment = Pipeline([
+    ("tfidf", TfidfVectorizer(
+        lowercase=True,
+        strip_accents="unicode",
+        ngram_range=(1, 2),
+        min_df=1,
+    )),
+    ("classifier", LogisticRegression(
+        max_iter=1000,
+        class_weight="balanced",
+        random_state=42,
+    )),
+])
+
+modele_sentiment.fit(texts, labels)
+
+# Persistance du modèle dans OneLake pour NB_Traitement_Incremental.
+Path(MODEL_PATH).parent.mkdir(parents=True, exist_ok=True)
+joblib.dump(modele_sentiment, MODEL_PATH)
+print(f"Modèle ML sauvegardé dans OneLake : {MODEL_PATH}")
+
+predictions = modele_sentiment.predict(texts)
+probabilites = modele_sentiment.predict_proba(texts)
 
 resultats = []
-for call_id, texte, res in zip(call_ids, texts, resultats_sentiment):
-    sentiment_ia = mapper_sentiment(res["label"])
-    score_confiance = round(res["score"], 4)
+for call_id, sentiment_ia, proba in zip(call_ids, predictions, probabilites):
     resultats.append({
         "call_id": call_id,
         "sentiment_ia": sentiment_ia,
-        "score_sentiment": score_confiance,
+        "score_sentiment": round(float(max(proba)), 4),
     })
 
 print(f"\nAnalyse terminée : {len(resultats)} appels traités")
-# Aperçu des 5 premiers résultats
 for r in resultats[:5]:
     print(f"  {r['call_id']} → {r['sentiment_ia']} (confiance: {r['score_sentiment']})")
 ```
@@ -655,7 +638,7 @@ print(f"Appels en alerte critique (score ≥ 50) : {alertes}")
 
 **Interprétation métier :** Score moyen de 31.8/100, 20 alertes critiques (score ≥ 50) sur 120 appels soit 16.7%. Le score maximum de 85 correspond aux appels combinant sentiment négatif + mots de résiliation + menace juridique — ce sont les cas à traiter en priorité absolue dans les 24h. Chaque alerte représente un risque de perte estimé à 2 000–8 000€ de contrats récurrents (maintenance, renouvellement, extension).
 
-> 💡 **Note modèle IA :** `DistilCamemBERT-Sentiment` produit cinq niveaux d'étoiles, regroupés ici en `negatif`, `neutre` et `positif`. La distribution exacte peut varier selon les textes ; le score churn de la Cellule 5 complète le modèle grâce aux mots-clés métier.
+> 💡 **Note modèle IA :** le classifieur local produit directement trois classes : `negatif`, `neutre` et `positif`. Il est adapté à la démonstration et au vocabulaire synthétique de SolarVoix ; le score churn de la Cellule 5 ajoute les règles métier.
 
 ---
 
@@ -781,7 +764,7 @@ df_s.groupBy("sentiment_reel", "sentiment_ia").count() \
     .show()
 ```
 
-**Interprétation :** La matrice confirme que le modèle est parfait sur les appels positifs (30/30) et les appels vraiment négatifs (35/35). En revanche, il classe les 30 appels neutres et les 25 très négatifs tous dans « negatif » — comportement attendu pour un modèle généraliste. La colonne `score_risque_churn` (Cellule 5) prend le relais pour discriminer les niveaux de gravité au sein des appels négatifs.
+**Interprétation :** La matrice mesure ici l'ajustement du modèle sur le jeu synthétique ayant servi à l'entraînement. Un score élevé est attendu, mais il ne constitue pas une évaluation indépendante. La colonne `score_risque_churn` complète le classement avec des règles métier explicites.
 
 ---
 
@@ -962,7 +945,7 @@ import numpy as np
 df_cm = df.dropna(subset=["sentiment_reel", "sentiment_ia"]).copy()
 
 # On mappe "tres_negatif" → "negatif" pour la comparaison
-# (le modèle HuggingFace n'a que 3 classes)
+# (le modèle local utilise 3 classes)
 df_cm["sentiment_reel_3classes"] = df_cm["sentiment_reel"].astype(str).replace(
     {"tres_negatif": "negatif"}
 )
@@ -1049,5 +1032,5 @@ spark.sql("DESCRIBE DETAIL silver_appels_enrichis") \
 | ------------------- | ------------------------ | --------------------------------- |
 | Génération données  | Python / Faker           | 120 appels synthétiques réalistes |
 | Ingestion Bronze    | Spark binaryFile + CSV   | 2 tables Delta Bronze             |
-| Analyse sentiment   | HuggingFace Transformers | sentiment_ia + score_sentiment    |
+| Analyse sentiment   | TF-IDF + régression logistique | sentiment_ia + score_sentiment |
 | Détection intention | Règles                   |                                   |
