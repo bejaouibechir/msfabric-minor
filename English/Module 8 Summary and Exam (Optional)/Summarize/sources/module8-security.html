@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security, Administration and Governance </title>
+  <link rel="stylesheet" href="../assets/source.css">
+</head>
+<body>
+  <header class="src-header">
+    <a href="../index.html" class="back-link">&#8592; Back to presentation </a>
+    <h1 class="src-title">Security, Administration and Governance </h1>
+  </header>
+  <main class="src-content"><p><a id="atelier-securite-microsoft-fabric"></a></p>
+<h1>Microsoft Fabric </h1>
+<hr />
+<p><a id="couche-1-rbac-workspace"></a></p>
+<h1>Layer 1 — RBAC Workspace</h1>
+<p><a id="etape-1-attribuer-le-role-workspace-viewer-au-compte-participant"></a></p>
+<h2> security workshop. Step 1 — Assign the Workspace Viewer role to the </h2>
+<p><strong> participating account. </strong>  lens. Assign the Viewer role to the participating account and understand the impact of this role on overall security. </p>
+<p><strong>Pourquoi</strong> :<br />
+Workspace Viewer is the only role that does not allow any dangerous modification or execution. It constitutes the security ceiling for all end users. The Admin and Member roles automatically bypass the RLS, the OLS and most item-level restrictions. This is why you must always start from the Viewer role before applying finer security. </p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Open the  <strong>FinCorp_Initial</strong>.</p>
+</li>
+<li>
+<p> workspace. At the top right, click the  <strong>Manage access</strong>.</p>
+</li>
+<li>
+<p> button. Click on  <strong>+ Add user or group</strong>.</p>
+</li>
+<li>
+<p>In the search box, type the name of the  <strong>participant</strong>  account. and select it. </p>
+</li>
+<li>
+<p>From the drop-down list of roles, choose  <strong>Viewer</strong>.</p>
+</li>
+<li>
+<p>Click the  <strong>Add</strong>.</p>
+</li>
+</ol>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p> button. Log in to Microsoft Fabric with the  <strong>participant</strong>.</p>
+</li>
+<li>
+<p> account. Open the  <strong>FinCorp_Initial</strong>.</p>
+</li>
+</ol>
+<p><strong> workspace. What you need to see </strong> :</p>
+<ul>
+<li>
+<p>The participant sees all the items in the workspace (Lakehouse, SQL endpoint, Report, Semantic Model). </p>
+</li>
+<li>
+<p>No button <strong>Edit</strong>, <strong>Delete</strong>, <strong>New</strong> or  <strong>Manage</strong> is available. </p>
+</li>
+<li>
+<p>The participant can only open the reports and view the data according to inherited permissions. </p>
+</li>
+</ul>
+<hr />
+<p><a id="couche-2-securite-dacces-aux-objets-fabric-item-level-permissions"></a></p>
+<h1>Layer 2 — Access security to Fabric objects (item-level permissions) </h1>
+<p><a id="etape-1-observer-le-baseline-permissions-heritees"></a></p>
+<h2>Step 1 — Observe the basic (inherited) </h2>
+<p><strong></strong> Lens: View permissions inherited from Viewer on each item before any modification. </p>
+<p><strong>Pourquoi</strong> :<br />
+Before restricting anything, you need to know what Viewer automatically inherits. This makes it clear which rights are dangerous and should be withdrawn. The Viewer inherits minimal permissions by default, but some remain too permissive. </p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Stay connected to the  <strong>dev</strong>  account. in the  <strong>FinCorp_Initial</strong>.</p>
+</li>
+<li>
+<p> workspace. For each next item, click on the  <strong>…</strong> (More options) to the right of the item name, then choose  <strong>Manage permissions</strong> :</p>
+</li>
+</ol>
+<ul>
+<li>
+<p>Lakehouse principal</p>
+</li>
+<li>
+<p>SQL analytics endpoint</p>
+</li>
+<li>
+<p>Rapport Power BI</p>
+</li>
+<li>
+<p>Semantic model  <strong>SM_SalesFinCorp</strong></p>
+</li>
+</ul>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p>Log in with the  <strong>participant</strong>.</p>
+</li>
+<li>
+<p> account. Open each item one by one and note what you can do (open, edit, run, etc.). </p>
+</li>
+</ol>
+<p><strong>What you need to see </strong> :</p>
+<ul>
+<li>
+<p>Lakehouse : Read, ViewOutput</p>
+</li>
+<li>
+<p>SQL analytics endpoint : Read, ReadData, ReadAll</p>
+</li>
+<li>
+<p>Rapport Power BI : Read, Write</p>
+</li>
+<li>
+<p>Semantic model: Read </p>
+</li>
+</ul>
+<hr />
+<p><a id="etape-2-retirer-readall-du-lakehouse"></a></p>
+<h2>Step 2 — Remove ReadAll from Lakehouse </h2>
+<p><strong></strong>  lens. : Delete  <strong>ReadAll</strong>  permission. on the Lakehouse item to block access to raw files and tables in the Lakehouse interface. </p>
+<p><strong>Pourquoi</strong> :<br />
+Permission  <strong>ReadAll</strong> (Read all with Apache Spark) allows direct access to files and tables via Lakehouse Explorer (Tab  <strong>Files</strong> and  <strong>Tables</strong>). Without this permission, the participant can no longer view or preview raw data, even if he retains  <strong>Read</strong>  permission. inherited from Workspace Viewer. This enhances security while keeping  <strong>ReadData</strong> on the SQL analytics endpoint for the DirectLake report. </p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Stay connected to the  <strong>dev</strong>  account. in the  <strong>FinCorp_Initial</strong>.</p>
+</li>
+<li>
+<p>Localisez l’item <strong>Lakehouse</strong> (<strong>LH_FinCorp</strong>).</p>
+</li>
+<li>
+<p> workspace. Click on the  <strong>…</strong> (More options) to the right of the Lakehouse. </p>
+</li>
+<li>
+<p>Choisissez <strong>Manage permissions</strong>.</p>
+</li>
+<li>
+<p>In the line of the  <strong>participant</strong> account. , click on the  <strong>…</strong> to the right of his permissions. </p>
+</li>
+<li>
+<p>Choisissez <strong>Remove ReadAll</strong>.</p>
+</li>
+<li>
+<p>Confirm deletion. </p>
+</li>
+</ol>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p>Log in with the  <strong>participant</strong>.</p>
+</li>
+<li>
+<p> account. Open the  <strong>FinCorp_Initial</strong>.</p>
+</li>
+<li>
+<p> workspace. Click on item  <strong>Lakehouse</strong> (<strong>LH_FinCorp</strong>).</p>
+</li>
+</ol>
+<p><strong>What you need to see </strong> :</p>
+<ul>
+<li>
+<p> <strong>Tables</strong> and  <strong>Files</strong> in the Lakehouse Explorer display red crosses or are inaccessible. </p>
+</li>
+<li>
+<p>The message "Some features are not available because of your permissions" appears at the top of the page. </p>
+</li>
+<li>
+<p>The participant can no longer view or preview raw files or explore tables freely. </p>
+</li>
+</ul>
+<hr />
+<p><a id="etape-3-retirer-reshare-du-rapport-power-bi"></a></p>
+<h2>Step 3 — Remove Reshare from Power BI </h2>
+<p><strong> report. </strong>  lens.: Delete the permission to modify the report so that the participant can only consult it. </p>
+<p><strong>Pourquoi</strong> :<br />
+Workspace Viewer often inherits  <strong>Reshare</strong>  permission. or  <strong>Write</strong> on reports. This opens the report in editing mode. We want to limit the participant to consultation alone. In the current interface, the visible dangerous permission is  <strong>Reshare</strong>. We'll remove it. </p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Stay connected to the  <strong>dev</strong>  account. in the  <strong>FinCorp_Initial</strong>.</p>
+</li>
+<li>
+<p> workspace. Find the  <strong>rapport Power BI</strong>.</p>
+</li>
+<li>
+<p>Click on the  <strong>…</strong> (More options) to the right of the report name. </p>
+</li>
+<li>
+<p>Choisissez <strong>Manage permissions</strong>.</p>
+</li>
+<li>
+<p>In the line of the  <strong>participant</strong> account. , click on the  <strong>…</strong> to the right of his permissions. </p>
+</li>
+<li>
+<p>Choisissez <strong>Remove reshare</strong>.</p>
+</li>
+<li>
+<p>Confirm deletion. </p>
+</li>
+</ol>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p>Log in with the  <strong>participant</strong>.</p>
+</li>
+<li>
+<p> account. Open the  <strong>FinCorp_Initial</strong>.</p>
+</li>
+<li>
+<p> workspace. Locate and open the Power BI report. </p>
+</li>
+</ol>
+<p><strong>What you need to see </strong> :</p>
+<ul>
+<li>
+<p>The  <strong>Edit</strong>  button. no longer available on the report. </p>
+</li>
+<li>
+<p>The report opens only in consultation mode. </p>
+</li>
+<li>
+<p>The participant can view the visuals and apply filters, but cannot modify the report, add pages, or save changes. </p>
+</li>
+</ul>
+<hr />
+<p><a id="etape-4-verifier-les-permissions-du-modele-semantique"></a></p>
+<h2>Step 4 — Check permissions for the </h2>
+<p><strong> semantic model. </strong>  lens. Check that the  <strong>SM_SalesFinCorp</strong>  semantic model is visible and read-only for the participating account. </p>
+<p><strong>Pourquoi</strong> :<br />
+The semantic model must remain visible to the participant so that it can consume the data via the report. However, he must not have  <strong>Build</strong>, <strong>Write</strong>  permissions. or  <strong>Reshare</strong>, which would create new reports or modify the model. The fact that the model is not visible to the participant indicates a broader permission problem that we need to correct or explain. </p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Stay connected to the  <strong>dev</strong>  account. in the  <strong>FinCorp_Initial</strong>.</p>
+</li>
+<li>
+<p> workspace. Locate the  <strong>SM_SalesFinCorp</strong>.</p>
+</li>
+<li>
+<p> semantic model. Click on the  <strong>…</strong> (More options) to the right of the model. </p>
+</li>
+<li>
+<p>Choisissez <strong>Manage permissions</strong>.</p>
+</li>
+<li>
+<p>In the line of the  <strong>participant</strong> account, check the current permissions. </p>
+</li>
+<li>
+<p>Make sure that permission  <strong>Read</strong> is present via the legacy of the Workspace Viewer role. </p>
+</li>
+</ol>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p>Log in with the  <strong>participant</strong>.</p>
+</li>
+<li>
+<p> account. Open the  <strong>FinCorp_Initial</strong>.</p>
+</li>
+<li>
+<p> workspace. Check the  <strong>SM_SalesFinCorp</strong>  semantic model. appears in the list of items. </p>
+</li>
+</ol>
+<p><strong>What you need to see </strong> :</p>
+<ul>
+<li>
+<p>With the  <strong>dev</strong>  account: the semantic model is visible and participant permissions are limited to  <strong>Read</strong>.</p>
+</li>
+<li>
+<p>With the  <strong>participant</strong>  account: the semantic model must appear in the workspace, even if it cannot edit. </p>
+</li>
+</ul>
+<hr />
+<p><a id="etape-5-verifier-et-retirer-build-du-modele-semantique"></a></p>
+<h2>Step 5 — Check and remove Build from the </h2>
+<p><strong> semantic model. </strong>  lens. : Ensure that the  <strong>participant</strong>  account. does not have  <strong>Build</strong>  permission. on the semantic model  <strong>SM_SalesFinCorp</strong>, to prevent the creation of new reports or indirect extraction of data. </p>
+<p><strong>Pourquoi</strong> :<br />
+Permission <strong>Build</strong> allows you to create new reports from the dataset, connect Excel to the model, query the model via external tools. In a company governed scenario, a Business Analyst Viewer should not have <strong>Build</strong> default. Only stored <strong>Read</strong>.</p>
+<p><strong>Actions formateur (compte dev — Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Open Workspace <strong>FinCorp_Initial</strong></p>
+</li>
+<li>
+<p>Localiser <strong>SM_SalesFinCorp</strong></p>
+</li>
+<li>
+<p>Click on <strong>…</strong></p>
+</li>
+<li>
+<p>Choisir <strong>Manage permissions</strong></p>
+</li>
+<li>
+<p>Find Account Line <strong>participant</strong></p>
+</li>
+<li>
+<p>Check if <strong>Build</strong> is present</p>
+</li>
+<li>
+<p>If present: click on <strong>Remove Build</strong></p>
+</li>
+<li>
+<p>Confirm deletion</p>
+</li>
+</ol>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p>Log in with account <strong>participant</strong></p>
+</li>
+<li>
+<p>Open Workspace <strong>FinCorp_Initial</strong></p>
+</li>
+<li>
+<p>Essayer :<br />
+   New report → From semantic model</p>
+</li>
+</ol>
+<p><strong>What you need to see</strong> :</p>
+<ul>
+<li>
+<p>The model remains visible.</p>
+</li>
+<li>
+<p>The existing report works.</p>
+</li>
+<li>
+<p>Creating a new report is impossible.</p>
+</li>
+</ul>
+<p><a id="couche-3-securite-du-modele-semantique-rls-cls"></a></p>
+<h1>Layer 3 — Safety of the semantic model (RLS / CLS)</h1>
+<hr />
+<p><a id="etape-1-implementer-row-level-security-rls"></a></p>
+<h2>Step 1 — Implementing Row-Level Security (RLS)</h2>
+<p><strong>Objective</strong> : Restrict access to dataset lines so that the participant can only see the authorized data according to his business scope.</p>
+<p><strong>Pourquoi</strong> :<br />
+The Row-Level Security allows dynamic filtering of visible lines in the semantic model depending on the connected user. It is the main mechanism for securing analytical data in a ruled Fabric environment. Without RLS, a Viewer user can view all accessible lines via the dataset.</p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Open the semantic model <strong>SM_SalesFinCorp</strong>.</p>
+</li>
+<li>
+<p>Click <strong>Security</strong>.</p>
+</li>
+<li>
+<p>Click <strong>+ New role</strong>.</p>
+</li>
+<li>
+<p>Name the role: <strong>SalesRegion_Filter</strong>.</p>
+</li>
+<li>
+<p>Select the table containing the column <strong>Region</strong>.</p>
+</li>
+<li>
+<p>Add the rule:</p>
+</li>
+</ol>
+<p>Region = USERPRINCIPALNAME()</p>
+<ol start="7">
+<li>
+<p>Save the rule.</p>
+</li>
+<li>
+<p>Add account <strong>participant</strong> Role <strong>SalesRegion_Filter</strong>.</p>
+</li>
+<li>
+<p>Save the configuration.</p>
+</li>
+</ol>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p>Log in with the account <strong>participant</strong>.</p>
+</li>
+<li>
+<p>Open the Power BI dataset related report <strong>SM_SalesFinCorp</strong>.</p>
+</li>
+</ol>
+<p><strong>What you need to see</strong> :</p>
+<ul>
+<li>
+<p>The participant only sees the lines corresponding to its perimeter.</p>
+</li>
+<li>
+<p>Other regions disappear from visuals.</p>
+</li>
+<li>
+<p>Aggregations of the ratio are automatically recalculated according to the filter applied.</p>
+</li>
+</ul>
+<hr />
+<p><a id="etape-2-verifier-lapplication-effective-de-la-rls"></a></p>
+<h2>Step 2 — Verify the effective application of SLA</h2>
+<p><strong>Objective</strong> Confirm that the SLR rule actually applies to the participant in the report.</p>
+<p><strong>Pourquoi</strong> :<br />
+Configuring an RLS does not guarantee its immediate application. It is necessary to check that the role is properly assigned and that the filtering works on the end-user side.</p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Go back to <strong>Security</strong> Model <strong>SM_SalesFinCorp</strong>.</p>
+</li>
+<li>
+<p>Check that the account <strong>participant</strong> appears in the role <strong>SalesRegion_Filter</strong>.</p>
+</li>
+<li>
+<p>Click <strong>View as role</strong>.</p>
+</li>
+<li>
+<p>Select <strong>SalesRegion_Filter</strong>.</p>
+</li>
+<li>
+<p>Check the data visible in simulation.</p>
+</li>
+</ol>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p>Refresh the report.</p>
+</li>
+<li>
+<p>Navigate between the pages of the report.</p>
+</li>
+<li>
+<p>Compare visible values with expected values.</p>
+</li>
+</ol>
+<p><strong>What you need to see</strong> :</p>
+<ul>
+<li>
+<p>Visuals display only authorized data.</p>
+</li>
+<li>
+<p>No line outside perimeter is visible.</p>
+</li>
+<li>
+<p>Overall totals change from Admin.</p>
+</li>
+</ul>
+<hr />
+<p><a id="etape-3-implementer-column-level-security-cls"></a></p>
+<h2>Step 3 — Implementing Column-Level Security (CLS)</h2>
+<p><strong>Objective</strong> Hide some sensitive columns of the semantic model to prevent participant consultation.</p>
+<p><strong>Pourquoi</strong> :<br />
+The Column-Level Security protects columns containing sensitive information such as salaries, margins or customer emails. Even if the user has access to the rows via RLS, these columns remain invisible.</p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Open the semantic model <strong>SM_SalesFinCorp</strong>.</p>
+</li>
+<li>
+<p>Passez en <strong>Model view</strong>.</p>
+</li>
+<li>
+<p>Select Column <strong>Salary</strong>.</p>
+</li>
+<li>
+<p>Open <strong>Properties</strong>.</p>
+</li>
+<li>
+<p>Activate the column mask.</p>
+</li>
+<li>
+<p>Repeat for:</p>
+</li>
+</ol>
+<ul>
+<li>
+<p><strong>Margin</strong></p>
+</li>
+<li>
+<p><strong>CustomerEmail</strong></p>
+</li>
+</ul>
+<ol start="7">
+<li>Save the changes.</li>
+</ol>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p>Log in with the account <strong>participant</strong>.</p>
+</li>
+<li>
+<p>Open the Power BI report.</p>
+</li>
+<li>
+<p>Check the fields available in the visuals.</p>
+</li>
+</ol>
+<p><strong>What you need to see</strong> :</p>
+<ul>
+<li>
+<p>Columns <strong>Salary</strong>, <strong>Margin</strong> and <strong>CustomerEmail</strong> n’apparaissent plus.</p>
+</li>
+<li>
+<p>They are not available in filters.</p>
+</li>
+<li>
+<p>They are not visible in the fields of the report.</p>
+</li>
+</ul>
+<hr />
+<p><a id="etape-4-verifier-lapplication-effective-de-la-cls"></a></p>
+<h2>Step 4 — Verify the effective application of the CLS</h2>
+<p><strong>Objective</strong> Confirm that the sensitive columns are actually invisible to the participant.</p>
+<p><strong>Pourquoi</strong> :<br />
+Some columns can remain visible via cache or active session. A user-side check ensures that the CLS is correctly applied.</p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>
+<p>Check in <strong>Model view</strong> the sensitive columns are hidden.</p>
+</li>
+<li>
+<p>Post the template again if necessary.</p>
+</li>
+</ol>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>
+<p>Close the report.</p>
+</li>
+<li>
+<p>Reopen the report.</p>
+</li>
+<li>
+<p>Browse the available fields.</p>
+</li>
+</ol>
+<p><strong>What you need to see</strong> :</p>
+<ul>
+<li>
+<p>Sensitive columns remain invisible.</p>
+</li>
+<li>
+<p>No visual can exploit them.</p>
+</li>
+<li>
+<p>No corresponding fields are shown in the participating dataset.</p>
+</li>
+</ul>
+<p><a id="couche-4-row-level-security-rls"></a></p>
+<h3>Layer 4 — Row-Level Security (RLS)</h3>
+<hr />
+<p><a id="etape-prealable-configurer-une-fixed-identity-sur-le-modele-semantique"></a></p>
+<h4>Pre-Step — Configure Fixed Identity on Semantic Model</h4>
+<p><strong>Objective</strong> : Switch the SSO model to Fixed Identity to unlock Manage roles.</p>
+<p><strong>Pourquoi</strong> : In default SSO mode, Manage roles is greyed — Fabric cannot apply the RLS without a fixed identity to access the data.</p>
+<p><strong>Actions formateur (compte dev – Workspace Admin)</strong> :</p>
+<ol>
+<li>In <code>FinCorp_Initial</code>click on <strong>...</strong> → <strong>Settings</strong> on <code>SM_SalesFinCorp</code></li>
+<li>Roll Section <strong>Gateway and cloud connections</strong></li>
+<li>In dropdown <strong>Maps to</strong>, select <strong>Create a connection</strong></li>
+<li>Complete the form:<br />
+   - <strong>Connection name</strong> : <code>devconnection</code><br />
+   - <strong>Authentication method</strong> : <code>OAuth 2.0</code><br />
+   - Cliquer <strong>Edit credentials</strong> → Log in with the account <strong>dev</strong><br />
+   - <strong>Single sign-on</strong> : laisser <strong>Unchecked</strong></li>
+<li>Cliquer <strong>Create</strong></li>
+<li>In dropdown <strong>Maps to</strong>, select <strong>devconnection</strong></li>
+<li>Cliquer <strong>Apply</strong></li>
+</ol>
+<p><strong>What you need to see</strong> : Dropdown displays <strong>devconnection</strong> for <strong>Default: Single Sign-On</strong>.</p>
+<hr />
+<p><a id="etape-1-creer-le-role-baeurope"></a></p>
+<h4>Step 1 — Creating the BA Europe role</h4>
+<p><strong>Objective</strong> Create a rule that filters the data so that the participant sees only Europe transactions.</p>
+<p><strong>Actions formateur</strong> :</p>
+<ol>
+<li><code>SM_SalesFinCorp</code> → <strong>Open data model</strong></li>
+<li>Click on the toggle <strong>Viewing → Editing</strong> to switch to editing mode</li>
+<li>Cliquer <strong>Manage roles</strong></li>
+<li>Cliquer <strong>+ New</strong> → name the role: <code>BA_Europe</code></li>
+<li>In <strong>Tables</strong>, select <code>sales_fincorp</code></li>
+<li>In <strong>Rules</strong>, cliquer <strong>+ New</strong> → remplir :<br />
+   - <strong>Column</strong> : <code>Region</code><br />
+   - <strong>Condition</strong> : <code>Equals</code><br />
+   - <strong>Value</strong> : <code>Europe</code></li>
+<li>Cliquer <strong>Save</strong></li>
+</ol>
+<p><strong>What you need to see</strong> : Message <strong>"Successfully applied role changes"</strong> — the role <code>BA_Europe</code> appears in the list with the Region = Europe rule.</p>
+<hr />
+<p><a id="etape-2-assigner-le-participant-au-role"></a></p>
+<h4>Step 2 — Assigning Participant to the Role</h4>
+<p><strong>Objective</strong> Link the account participating in the BA Europe role.</p>
+<p><strong>Actions formateur</strong> :</p>
+<ol>
+<li>In <strong>Manage security roles</strong> → cliquer l'onglet <strong>Assign</strong></li>
+<li>Select Role <code>BA_Europe</code></li>
+<li>Enter account email <strong>participant</strong></li>
+<li>Cliquer <strong>Add</strong> → <strong>Save</strong> → <strong>Close</strong></li>
+</ol>
+<p><strong>What you need to see</strong> : The participant appears under <code>BA_Europe (1)</code> in the page <strong>Row-Level Security</strong>.</p>
+<hr />
+<p><a id="etape-3-tester-avec-le-compte-participant"></a></p>
+<h4>Step 3 — Test with the participating account</h4>
+<p><strong>Objective</strong> : Validate that the RLS filter actually applies on the participating side.</p>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>Log in with account <strong>participant</strong></li>
+<li>Ouvrir <code>RPT_SalesFinCorp</code></li>
+<li>Observe table and histogram</li>
+</ol>
+<p><strong>What you need to see</strong> :</p>
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Expected result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Region column in table</td>
+<td>Uniquement <strong>Europe</strong></td>
+</tr>
+<tr>
+<td>Histogramme Sum of Amount by Region</td>
+<td>One bar — <strong>Europe</strong></td>
+</tr>
+<tr>
+<td>Total Sum of Amount</td>
+<td>Less than total (approximately 3.82M)</td>
+</tr>
+<tr>
+<td>Africa/Asia lines</td>
+<td>❌ Absentes</td>
+</tr>
+</tbody>
+</table>
+<p><a id="couche-5-object-level-security-ols-masquer-la-colonne-salary"></a></p>
+<h3>Layer 5 — Object-Level Security (OLS) — Hide Column Salary</h3>
+<hr />
+<p><a id="etape-prealable-connexion-ssms-au-modele-semantique"></a></p>
+<h4>Prior step — SSMS connection to semantic model</h4>
+<p><strong>Objective</strong> : Connect to the semantic model via SSMS to run the TMSL script.</p>
+<p><strong>Actions formateur</strong> :</p>
+<ol>
+<li>Ouvrir <strong>SSMS</strong></li>
+<li><strong>Server type</strong> : <code>Analysis Services</code></li>
+<li><strong>Server name</strong> : recover URL from <code>SM_SalesFinCorp</code> → <strong>...</strong> → <strong>Settings</strong> → <strong>Server settings</strong> → Copy the <strong>Connection string</strong> — take only the part :</li>
+</ol>
+<pre><code>powerbi://api.powerbi.com/v1.0/myorg/FinCorp_Initial
+</code></pre>
+<ol start="4">
+<li><strong>Authentication</strong> : <code>Azure Active Directory - Universal with MFA</code></li>
+<li><strong>User name</strong> : account email <strong>dev</strong></li>
+<li>Cliquer <strong>Connect</strong></li>
+</ol>
+<p><strong>What you need to see</strong> : L'Object Explorer affiche <code>SM_SalesFinCorp</code> → <strong>Tables</strong> → <code>sales_fincorp</code> and <strong>Roles</strong> → <code>BA_Europe</code>.</p>
+<hr />
+<p><a id="etape-1-executer-le-script-tmsl-pour-appliquer-lols"></a></p>
+<h4>Step 1 — Run the TMSL script to apply the </h4>
+<p><strong> OLS. </strong> Lens: Hide column  <code>Salary</code> for the role  <code>BA_Europe</code> via a TMSL script executed from SSMS. </p>
+<p><strong>Pourquoi</strong> : OLS on a column is not configured from the Fabric web interface. You need to go through SSMS connected to the XMLA endpoint of the workspace and run a TMSL  <code>createOrReplace</code>  script. which redefines the model with the  <code>metadataPermission: none</code>  property. on the  <code>Salary</code>.</p>
+<p><strong>Actions formateur</strong> :</p>
+<ol>
+<li> column. In SSMS, click  <strong>New Query</strong></li>
+<li>Paste the full script below </li>
+<li>Press  <strong>F5</strong></li>
+</ol>
+<pre><code class="language-json">{
+  &quot;createOrReplace&quot;: {
+    &quot;object&quot;: {
+      &quot;database&quot;: &quot;SM_SalesFinCorp&quot;
+    },
+    &quot;database&quot;: {
+      &quot;name&quot;: &quot;SM_SalesFinCorp&quot;,
+      &quot;id&quot;: &quot;acdc0c1b-21ad-440e-b4fd-87e403d5aeb2&quot;,
+      &quot;compatibilityLevel&quot;: 1604,
+      &quot;model&quot;: {
+        &quot;culture&quot;: &quot;en-US&quot;,
+        &quot;dataAccessOptions&quot;: {
+          &quot;legacyRedirects&quot;: true,
+          &quot;returnErrorValuesAsNull&quot;: true
+        },
+        &quot;defaultPowerBIDataSourceVersion&quot;: &quot;powerBI_V3&quot;,
+        &quot;sourceQueryCulture&quot;: &quot;en-US&quot;,
+        &quot;tables&quot;: [
+          {
+            &quot;name&quot;: &quot;sales_fincorp&quot;,
+            &quot;lineageTag&quot;: &quot;d93b20ca-02bc-4464-bfa1-535de7f07eb9&quot;,
+            &quot;sourceLineageTag&quot;: &quot;[dbo].[sales_fincorp]&quot;,
+            &quot;columns&quot;: [
+              {
+                &quot;name&quot;: &quot;TransactionID&quot;,
+                &quot;dataType&quot;: &quot;string&quot;,
+                &quot;sourceColumn&quot;: &quot;TransactionID&quot;,
+                &quot;lineageTag&quot;: &quot;d55f01d8-6191-4e10-85d3-8e38eb6d4b93&quot;,
+                &quot;sourceLineageTag&quot;: &quot;TransactionID&quot;,
+                &quot;summarizeBy&quot;: &quot;none&quot;,
+                &quot;annotations&quot;: [{&quot;name&quot;: &quot;SummarizationSetBy&quot;,&quot;value&quot;: &quot;Automatic&quot;}]
+              },
+              {
+                &quot;name&quot;: &quot;Region&quot;,
+                &quot;dataType&quot;: &quot;string&quot;,
+                &quot;sourceColumn&quot;: &quot;Region&quot;,
+                &quot;lineageTag&quot;: &quot;06d34469-0815-4bce-80c1-4e5e87790471&quot;,
+                &quot;sourceLineageTag&quot;: &quot;Region&quot;,
+                &quot;summarizeBy&quot;: &quot;none&quot;,
+                &quot;annotations&quot;: [{&quot;name&quot;: &quot;SummarizationSetBy&quot;,&quot;value&quot;: &quot;Automatic&quot;}]
+              },
+              {
+                &quot;name&quot;: &quot;SalesRep&quot;,
+                &quot;dataType&quot;: &quot;string&quot;,
+                &quot;sourceColumn&quot;: &quot;SalesRep&quot;,
+                &quot;lineageTag&quot;: &quot;3212a362-f025-44d1-9129-dec9776e1ebc&quot;,
+                &quot;sourceLineageTag&quot;: &quot;SalesRep&quot;,
+                &quot;summarizeBy&quot;: &quot;none&quot;,
+                &quot;annotations&quot;: [{&quot;name&quot;: &quot;SummarizationSetBy&quot;,&quot;value&quot;: &quot;Automatic&quot;}]
+              },
+              {
+                &quot;name&quot;: &quot;Amount&quot;,
+                &quot;dataType&quot;: &quot;double&quot;,
+                &quot;sourceColumn&quot;: &quot;Amount&quot;,
+                &quot;lineageTag&quot;: &quot;a0cb4e88-2030-4e4d-82c0-d73836fbe5fe&quot;,
+                &quot;sourceLineageTag&quot;: &quot;Amount&quot;,
+                &quot;summarizeBy&quot;: &quot;sum&quot;,
+                &quot;annotations&quot;: [
+                  {&quot;name&quot;: &quot;SummarizationSetBy&quot;,&quot;value&quot;: &quot;Automatic&quot;},
+                  {&quot;name&quot;: &quot;PBI_FormatHint&quot;,&quot;value&quot;: &quot;{\&quot;isGeneralNumber\&quot;:true}&quot;}
+                ]
+              },
+              {
+                &quot;name&quot;: &quot;Salary&quot;,
+                &quot;dataType&quot;: &quot;int64&quot;,
+                &quot;sourceColumn&quot;: &quot;Salary&quot;,
+                &quot;formatString&quot;: &quot;0&quot;,
+                &quot;lineageTag&quot;: &quot;6ad40859-9dda-48f0-a275-5a8c682bd4ed&quot;,
+                &quot;sourceLineageTag&quot;: &quot;Salary&quot;,
+                &quot;summarizeBy&quot;: &quot;sum&quot;,
+                &quot;annotations&quot;: [{&quot;name&quot;: &quot;SummarizationSetBy&quot;,&quot;value&quot;: &quot;Automatic&quot;}]
+              },
+              {
+                &quot;name&quot;: &quot;ClientName&quot;,
+                &quot;dataType&quot;: &quot;string&quot;,
+                &quot;sourceColumn&quot;: &quot;ClientName&quot;,
+                &quot;lineageTag&quot;: &quot;879a25dc-df16-4786-996e-7d15586b74a8&quot;,
+                &quot;sourceLineageTag&quot;: &quot;ClientName&quot;,
+                &quot;summarizeBy&quot;: &quot;none&quot;,
+                &quot;annotations&quot;: [{&quot;name&quot;: &quot;SummarizationSetBy&quot;,&quot;value&quot;: &quot;Automatic&quot;}]
+              },
+              {
+                &quot;name&quot;: &quot;Date&quot;,
+                &quot;dataType&quot;: &quot;dateTime&quot;,
+                &quot;sourceColumn&quot;: &quot;Date&quot;,
+                &quot;formatString&quot;: &quot;General Date&quot;,
+                &quot;lineageTag&quot;: &quot;e9d96c94-a752-4811-8815-851d9778b6b2&quot;,
+                &quot;sourceLineageTag&quot;: &quot;Date&quot;,
+                &quot;summarizeBy&quot;: &quot;none&quot;,
+                &quot;annotations&quot;: [{&quot;name&quot;: &quot;SummarizationSetBy&quot;,&quot;value&quot;: &quot;Automatic&quot;}]
+              }
+            ],
+            &quot;partitions&quot;: [
+              {
+                &quot;name&quot;: &quot;sales_fincorp&quot;,
+                &quot;mode&quot;: &quot;directLake&quot;,
+                &quot;source&quot;: {
+                  &quot;type&quot;: &quot;entity&quot;,
+                  &quot;entityName&quot;: &quot;sales_fincorp&quot;,
+                  &quot;expressionSource&quot;: &quot;DirectLake - LH_FinCorp&quot;,
+                  &quot;schemaName&quot;: &quot;dbo&quot;
+                }
+              }
+            ]
+          }
+        ],
+        &quot;roles&quot;: [
+          {
+            &quot;name&quot;: &quot;BA_Europe&quot;,
+            &quot;modelPermission&quot;: &quot;read&quot;,
+            &quot;members&quot;: [
+              {
+                &quot;memberName&quot;: &quot;participant@contactemeraudeit.onmicrosoft.com&quot;,
+                &quot;memberId&quot;: &quot;be17e5f0-241e-4319-b111-a7d471d2dfc5&quot;,
+                &quot;identityProvider&quot;: &quot;AzureAD&quot;,
+                &quot;memberType&quot;: &quot;user&quot;
+              }
+            ],
+            &quot;tablePermissions&quot;: [
+              {
+                &quot;name&quot;: &quot;sales_fincorp&quot;,
+                &quot;filterExpression&quot;: &quot;[Region] == \&quot;Europe\&quot;&quot;,
+                &quot;columnPermissions&quot;: [
+                  {
+                    &quot;name&quot;: &quot;Salary&quot;,
+                    &quot;metadataPermission&quot;: &quot;none&quot;
+                  }
+                ]
+              }
+            ],
+            &quot;annotations&quot;: [
+              {&quot;name&quot;: &quot;PBI_Id&quot;,&quot;value&quot;: &quot;9795f5ec15ff46a5816447307930da6f&quot;}
+            ]
+          }
+        ],
+        &quot;expressions&quot;: [
+          {
+            &quot;name&quot;: &quot;DirectLake - LH_FinCorp&quot;,
+            &quot;kind&quot;: &quot;m&quot;,
+            &quot;expression&quot;: [
+              &quot;let&quot;,
+              &quot;    Source = AzureStorage.DataLake(\&quot;https://onelake.dfs.fabric.microsoft.com/ff775b0e-e59d-4a21-a51f-914c586a1a16/49310b8a-b467-40d1-a6ce-b74a7605f6f1\&quot;, [HierarchicalNavigation=true])&quot;,
+              &quot;in&quot;,
+              &quot;    Source&quot;
+            ],
+            &quot;lineageTag&quot;: &quot;5d3a5902-a1aa-40a8-ae36-08135856dff2&quot;,
+            &quot;annotations&quot;: [{&quot;name&quot;: &quot;PBI_IncludeFutureArtifacts&quot;,&quot;value&quot;: &quot;False&quot;}]
+          }
+        ],
+        &quot;annotations&quot;: [
+          {&quot;name&quot;: &quot;PBI_QueryOrder&quot;,&quot;value&quot;: &quot;[\&quot;DirectLake - LH_FinCorp\&quot;]&quot;},
+          {&quot;name&quot;: &quot;__PBI_TimeIntelligenceEnabled&quot;,&quot;value&quot;: &quot;1&quot;},
+          {&quot;name&quot;: &quot;__LastRPTime&quot;,&quot;value&quot;: &quot;134189920268591996&quot;},
+          {&quot;name&quot;: &quot;PBI_ProTooling&quot;,&quot;value&quot;: &quot;[\&quot;DirectLakeOnOneLakeInWeb\&quot;,\&quot;WebModelingEdit\&quot;,\&quot;DaxQueryView_Desktop\&quot;]&quot;}
+        ]
+      }
+    }
+  }
+}
+</code></pre>
+<p><strong>What you need to see </strong> :</p>
+<pre><code class="language-xml">&lt;return xmlns=&quot;urn:schemas-microsoft-com:xml-analysis&quot;&gt;
+  &lt;root xmlns=&quot;urn:schemas-microsoft-com:xml-analysis:empty&quot; /&gt;
+&lt;/return&gt;
+</code></pre>
+<p>Empty answer = success without error. </p>
+<hr />
+<p><a id="etape-2-retirer-salary-du-rapport"></a></p>
+<h4>Step 2 — Remove Salary from the </h4>
+<p><strong> report. </strong>  lens. : Delete the reference to  <code>Salary</code> in the report visuals to avoid the error "Fields that need to be fixed". </p>
+<p><strong>Pourquoi</strong> : OLS makes the column inaccessible at model level. If a visual of the report still refers to  <code>Salary</code>, Power BI displays an error when loading the participating side report. </p>
+<p><strong>Actions formateur</strong> :</p>
+<ol>
+<li>Ouvrir <code>RPT_SalesFinCorp</code> → cliquer <strong>Edit</strong></li>
+<li>Select the table visual that contains the  <code>Salary</code></li>
+<li> column. In the  <strong>Fields</strong>  panel. on the right, uncheck or remove  <code>Salary</code></li>
+<li>Cliquer <strong>Save</strong></li>
+</ol>
+<p><strong>What you need to see </strong> : The report is recorded without the  <code>Salary</code>.</p>
+<hr />
+<p><a id="etape-3-tester-avec-le-compte-participant-1"></a></p>
+<h4> column. Step 3 — Test with the participating account </h4>
+<p><strong>Actions participant</strong> :</p>
+<ol>
+<li>Connect with the  <strong>participant</strong></li>
+<li>Ouvrir <code>RPT_SalesFinCorp</code></li>
+<li> account. Observe the </li>
+</ol>
+<p><strong> table and panel. What you need to see </strong> :</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th> verification. Expected result </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Salary column in table </td>
+<td>❌ Absente</td>
+</tr>
+<tr>
+<td>Salary column in the </td>
+<td>❌ Absente</td>
+</tr>
+<tr>
+<td> Fields panel. Region data</td>
+<td>✅ Europe uniquement</td>
+</tr>
+<tr>
+<td>Rapport fonctionnel</td>
+<td>No mistake</td>
+</tr>
+</tbody>
+</table></main>
+</body>
+</html>

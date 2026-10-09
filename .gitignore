@@ -17,3 +17,8 @@ apm_modules/
 .azure/
 .fabric/
 .fabric-admin/
+
+# Temporary local machine-translation runtime and models
+.translation-runtime/
+.translation-runtime-user/
+.translation-data/

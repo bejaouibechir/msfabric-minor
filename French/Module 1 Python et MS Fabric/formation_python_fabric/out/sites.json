@@ -1,0 +1,56 @@
+[
+  {
+    "site_id": "SITE_IND_001",
+    "site_type": "Industrie",
+    "capacity_mw": "5.0",
+    "flexible": "True",
+    "baseline_mw": "2.5",
+    "curtailment_price_eur_mwh": "102.0",
+    "region": "Ile-de-France"
+  },
+  {
+    "site_id": "SITE_IND_002",
+    "site_type": "Industrie",
+    "capacity_mw": "3.5",
+    "flexible": "True",
+    "baseline_mw": "1.75",
+    "curtailment_price_eur_mwh": "116.0",
+    "region": "Auvergne-Rhone-Alpes"
+  },
+  {
+    "site_id": "SITE_COM_001",
+    "site_type": "Commercial",
+    "capacity_mw": "2.0",
+    "flexible": "False",
+    "baseline_mw": "1.0",
+    "curtailment_price_eur_mwh": "",
+    "region": "Auvergne-Rhone-Alpes"
+  },
+  {
+    "site_id": "SITE_COM_002",
+    "site_type": "Commercial",
+    "capacity_mw": "1.5",
+    "flexible": "False",
+    "baseline_mw": "0.75",
+    "curtailment_price_eur_mwh": "",
+    "region": "Ile-de-France"
+  },
+  {
+    "site_id": "SITE_RES_001",
+    "site_type": "Residentiel",
+    "capacity_mw": "0.8",
+    "flexible": "True",
+    "baseline_mw": "0.4",
+    "curtailment_price_eur_mwh": "",
+    "region": "Auvergne-Rhone-Alpes"
+  },
+  {
+    "site_id": "SITE_RES_002",
+    "site_type": "Residentiel",
+    "capacity_mw": "0.6",
+    "flexible": "True",
+    "baseline_mw": "0.3",
+    "curtailment_price_eur_mwh": "",
+    "region": "Ile-de-France"
+  }
+]

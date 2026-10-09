@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingestion Unstructured – Part 1 </title>
+  <link rel="stylesheet" href="../assets/source.css">
+</head>
+<body>
+  <header class="src-header">
+    <a href="../index.html" class="back-link">&#8592; Back to presentation </a>
+    <h1 class="src-title">Ingestion Unstructured – Part 1 </h1>
+  </header>
+  <main class="src-content"><p><a id="atelier-5-traitement-des-donnees-non-structurees"></a></p>
+<h1>Workshop 5 — Processing of unstructured data </h1>
+<p><a id="partie-1-ingestion-enrichissement-ia-et-couche-silver"></a></p>
+<h2>Part 1: AI Ingestion, Enrichment and Silver </h2>
+<p><a id="theme-appels-clients-audio-secteur-energies-renouvelables"></a></p>
+<h3> Layer. Theme: Audio customer calls — Renewable Energy Sector </h3>
+<hr />
+<p><a id="contexte-metier"></a></p>
+<h2>Business context </h2>
+<p><strong>SolarVoix</strong> is a French renewable energy player (solar panels, heat pumps, VE charging stations). Their customer relationship center receives  <strong>120 appels par semaine</strong>. Today, these calls are saved in MP3, archived in a network folder, and  <strong>No one analyses them </strong>. Result: Disgruntled customers leave without the company knowing, and the rate of churn rises. </p>
+<p><strong>Problem: </strong> How to automatically detect risk calls (very negative feeling, intention to terminate) to alert the VAS manager in real time? </p>
+<p><strong>Architecture cible (3 parties) :</strong></p>
+<pre><code>Audio files (synthetic MP3)
+▼
+Lakehouse Bronze ← raw ingestion
+▼
+Notebook PySpark + Analysis IA (transformers, without API key)
+▼
+Lakehouse Silver ← transcripts + enriched scores
+▼
+Pipeline Data Factory + Activator (Part 2)
+▼
+Semantic model + Power BI Fabric Report (Part 3) 
+</code></pre>
+<blockquote>
+<p>💡 <strong>Pedagogical choice: </strong> This workshop uses  <strong>no </strong> paid Azure key. . IA transcription and analysis are based on open-source libraries (<code>transformers</code>, <code>pipeline</code> HuggingFace). You can replay the workshop indefinitely without external dependence. </p>
+</blockquote>
+<hr />
+<p><a id="prerequis"></a></p>
+<h2>Prerequisites </h2>
+<table>
+<thead>
+<tr>
+<th>Element </th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Workspace Fabric</td>
+<td><code>WS_SolarVoix</code> (F64 or Trial capacity) </td>
+</tr>
+<tr>
+<td>Lakehouse</td>
+<td><code>LH_SolarVoix</code></td>
+</tr>
+<tr>
+<td>Notebook 1</td>
+<td><code>NB_Data_Generation</code></td>
+</tr>
+<tr>
+<td>Notebook 2</td>
+<td><code>NB_Bronze_to_Silver</code></td>
+</tr>
+<tr>
+<td>Notebook 3</td>
+<td><code>NB_Visualizations</code></td>
+</tr>
+<tr>
+<td></td>
+<td><code>transformers</code>, <code>torch</code>, <code>pydub</code>, <code>faker</code> (installables via %pip)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><a id="partie-1"></a></p>
+<h1>PART 1</h1>
+<hr />
+<p><a id="bloc-1-mise-en-place-de-lenvironnement"></a></p>
+<h2>Bloc 1 — Mise en place de l'environnement</h2>
+<p><a id="11-creer-le-workspace"></a></p>
+<h3> libraries. 1.1 — Create the Workspace </h3>
+<ol>
+<li>Go to  <strong>app.fabric.microsoft.com</strong></li>
+<li>In the left menu →  <strong>Workspaces</strong> → <strong>+ New workspace</strong></li>
+<li>Nom : <code>WS_SolarVoix</code></li>
+<li>Mode de licence : <strong>Trial</strong> or  <strong>Fabric capacity</strong></li>
+<li>Cliquer <strong>Apply</strong></li>
+</ol>
+<blockquote>
+<p>⚠️ <strong>Current trap: </strong> If you use Trial capacity, it expires after 60 days. Note the expiry date in your training prerequisites. </p>
+</blockquote>
+<p><a id="12-creer-le-lakehouse"></a></p>
+<h3>1.2 — Create Lakehouse </h3>
+<ol>
+<li>In  <code>WS_SolarVoix</code> → <strong>+ New item</strong> → <strong>Lakehouse</strong></li>
+<li>Nom : <code>LH_SolarVoix</code></li>
+<li>Cliquer <strong>Create</strong></li>
+<li>Check that the  <strong>Tables</strong> and  <strong>Files</strong> folders appear in the left explorer </li>
+</ol>
+<p><a id="13-creer-le-premier-notebook"></a></p>
+<h3>1.3 — Create the first Notebook </h3>
+<ol>
+<li>Workspace → <strong>+ New item</strong> → <strong>Notebook</strong></li>
+<li>Nommer : <code>NB_Data_Generation</code></li>
+<li>In the  <strong>Lakehouses</strong>  panel. left →  <strong>Add</strong> → select  <code>LH_SolarVoix</code></li>
+</ol>
+<hr />
+<p><a id="bloc-2-generation-des-donnees-synthetiques"></a></p>
+<h2>Block 2 — Generation of </h2>
+<blockquote>
+<p>💡 <strong> synthetic data. Why generate data? </strong> In a real context, you would have MP3 recorded by your call center. For this workshop, we generate 120 fictitious but realistic calls (products, complaints, intentions typical of the energy sector). This allows to replay the workshop as many times as desired. </p>
+</blockquote>
+<p><a id="21-cellule-1-installation-des-bibliotheques"></a></p>
+<h3>2.1 — Cell 1: Installation of </h3>
+<pre><code class="language-python"> Libraries. 1-installation-of-dependences
+==CELL 1: Installation of dependencies==
+#
+&lt;a id=&quot;Objective-install-the-libraries-necessary-to-generate-the-donates-gt;&lt;/a&gt;
+# OBJECTIVE: Install libraries to generate data
+&lt;a id=&quot;synthetics-and-analysis-ia-without-external key;&gt;&lt;/a&gt;
+# synthetic and perform IA analysis without external key.
+#
+&lt;a id=&quot;pipe-install-sexcute-in-cluster-spark-environment&gt;/a&gt;
+# %pipe install runs in the Spark cluster environment.
+&lt;a id=&t;-est-temporary-session-spark-quot;&lt;/a&gt;
+# The installation is temporal (spark session duration).
+&lt;a id=&quot;to-persister-use-environment-items-in-manufacture&lt;/a&gt;
+# To persist, use Environment items in Fabric.
+#
+&lt;a id=&quot;faker-genere-des-nomes-villes-dates-aleatoires-realistes&gt;&lt;/a&gt;
+# faker → generics names, cities, realistic random dates
+&lt;a id=&quot;pydub-manipulation-audio-creation-de-file-wavmp3-vides&gt;&lt;/a&gt;
+# pydub → Audio manipulation (creating empty WAV/MP3 files)
+&lt;a id=&quot;transformers-models-huggingface-for-feel-without-key-api-quot;&gt;&lt;/a&gt;
+# transform → HuggingFace models for feeling without API key
+&lt;a id=&quot;torch-requirements-by-transformers-backend-de-calculation;&gt;&lt;/a&gt;
+# torch → required by transformers (calculation backend)
+
+
+import subprocess, sys
+pkgs = [Quot;faker&quot;,Quot;pydub&quot;,Quot;processers&quot;,Quot;torch&quot;,Quot;sentencepiece&quot;]
+subprocess.run([sys.executable, & quot;-m&quot;, & quot;pip&quot;, & quot;install&quot;, & quot;--quiet&quot;] + pkgs, check=True)
+print(&quot;Installation completed)print(&quot;Installation completed) 
+</code></pre>
+<p><strong>Expected result: </strong> <code>Installation completed </code> (may take 2-3 minutes at first launch) </p>
+<p><a id="22-cellule-2-generation-des-transcriptions-et-metadonnees"></a></p>
+<h3>2.2 — Cell 2: Generation of transcripts and metadata</h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-2-generation-of-120-synthetic calls&gt;&lt;/a&gt;
+#=== CELL 2: Generation of 120 synthetic calls ===
+#
+&lt;a id=&t;------------------------------------------------------------------------------------------------
+# OBJECTIVE: Create two files in Lakehouse:
+&lt;a id=&quot;1-120-file-txt-in-filesaudiocalls-simulate-transcripts&gt;&lt;/a&gt;
+1. 120 .txt files in Files/audio calls/ (simulate transcripts)
+&lt;a id=&quot;2-un-file-callsmetadatacsv-time stamping-client-product&gt;&lt;/a&gt;
+#2. A calls metadata.csv file (timer, duration, customer, product)
+#
+In a-project-reel-the-txt would-be-replaced-by-mp3-and-the-quot;&gt;/a&gt;
+# In a real project, .txt would be replaced by .mp3 and the
+&lt;a id=&quot;transcription- would- be done-by-a-model-whisper-or-azure-speech&quot;&gt;/a&gt;
+# transcription would be done by a Whisper or Azure Speech model.
+&lt;a id=&quot;the-structure-of-is-identical-only-source-change-quot;&gt;&lt;/a&gt;
+# The data structure is identical — only the source changes.
+#
+o o o o o o o o
+# SolarVoix trade vocabulary:
+&lt;a id=&quot;-psf-pannels-solaires-fotovoltaics&gt;&lt;/a&gt;
+# - PSF = Fotovoltaic Solar Panels
+&lt;a id=&quot;-pac-pump-a-heat;&gt;&lt;/a&gt;
+# - PAC = Heat Pump
+&lt;a id=&quot;-borne-limite-de-charge-t;&gt;/a&gt;
+# - BORNE = charging station VE
+
+import random
+import csv
+import bone
+from datetime import datetime, timedelta
+from faker import Faker
+
+Fake = Faker(&quot;en FR&quot;)
+random.seed(42) # Fixed seed → reproducible results between sessions
+
+&lt;a id=&quot;-&gt;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;definition-of-transcriptions&lt;/a&gt;
+# DEFINITION OF THE TRANSCRIPTIONS CORPUS
+&lt;a id=&quot;--1&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;each-category-contains-type-phrases-dun-call-client-quot;&gt;&lt;/a&gt;
+# Each category contains phrases typical of a client call.
+&lt;a id=&quot;Categories-cover-the-spectrum-complete-satisfied-were-satisfied-satisfied;&gt;&lt;/a&gt;
+# The categories cover the full spectrum: very satisfied → very dissatisfied.
+
+TEMPLATES = {
+[
+Hello, I just wanted to thank you for installing my solar panels. &quot;
+&quot; The technician was very professional and everything works perfectly. &quot;
+&quot; I am really happy with the service and will recommend you to my neighbors. &quot;,
+
+&quot; Your team has done a remarkable job for my heat pump. &quot;
+&quot; The installation was quick, clean, and the savings on my bill are already visible. &quot;
+&quot; Keep going, that's exactly what we're waiting for. &quot;,
+
+&quot; I just received my first EDF bill since the installation of the panels. &quot;
+&quot; I already save 40 percent. Your solution is excellent, thank you to the entire team.
+],
+[
+Hello, I would like information about your solar panel maintenance offers. &quot;
+&quot; My contract expires in three months and I would like to know about the renewal options. &quot;,
+
+&quot; I'll call you to report a delivery time from my charging station. &quot;
+&quot; I was told 10 days, he's in the 14th. Can you give me a specific date?
+
+Hello, I would like information on the refund of VAT.
+&quot;for my solar panel installation. What documents do I need to provide?
+],
+Negative quot;: [
+&quot; I've been waiting two weeks for a technician to fix my heat pump. &quot;
+&quot; It's unacceptable, I have kids at home and it's cold. &quot;
+&quot; If this continues, I will file a complaint with the DGCCRF. &quot;,
+
+&quot; My solar production tracking application hasn't worked for 10 days. &quot;
+&quot; I called three times, nobody calls back. This is a total disrespect for clients. &quot;
+&quot; I'm really disappointed with your after-sales service.
+
+&quot; Your technicians damaged my roof when the panels were laid. &quot;
+&quot; I've been waiting for an answer from your manager for two weeks. &quot;
+&quot; This situation is unacceptable and I will tell my insurance about it.
+],
+Negative quotres: [
+&quot; I'll terminate my contract immediately. It's been three months since your &quot; charging station
+&quot;does not work and you do nothing. I lost confidence in your company. &quot;
+&quot; I will leave negative opinions everywhere and file a formal complaint.
+
+&quot; This is the last time I call you. You sold me a heat pump &quot;
+It breaks down every month. I want a full refund and will enter &quot;
+The energy mediator if you do not settle this within 48 hours. &quot;,
+
+&quot; Your business is a scam. My solar panels have never produced &quot;
+What you promised me. I'm contacting my lawyer this week.
+&quot; and I cancel all my contracts with you. You're going to hear from me.
+],
+}
+
+PRODUCTS = [&quot;Sunboards PSF&quot;,Quot;Heat Pump PAC&quot;,Quot;Borne recharges VE&quot;,Quot;Storage Battery&quot;]
+INTENTIONS = {
+Positive quot: [Quot; satisfaction, recommendation quot;],
+,
+[&quot;complaint technical quot;,quot;complaint sav&quot;,quot;],
+Negative Quot.:
+}
+
+&lt;a id=&quot;--2&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;generation-of-120-calls&gt;&lt;/a&gt;
+# GENERATION OF THE 120 CALLS
+&lt;a id=&quot;--3&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;partition-30-positive-30-neutral-35-negative-25-negative&gt;&lt;/a&gt;
+# Distribution: 30 positive, 30 neutral, 35 negative, 25 very negative
+&lt;a id=&quot;representation-realist-dun-centre-sav-subtension&gt;&lt;/a&gt;
+# → Realistic representation of a live VAS centre
+
+Distribution = (
+[(positive quot; 30)] +
+[(neutri quot; 30)] +
+[(negative quot, 35)] +
+[(negative quot; 25)]
+)
+
+calls = []
+call id = 1
+date start = datetime(2024, 10, 1)
+
+for sentiment, count in DISTRIBUTION:
+for   in range(count):
+template = random.choice(TEMPLATES[sentiment])
+intention = random.choice(INTENTIONS[sentiment])
+product = random.choice(PRODUCTS)
+duration sec = random.randint(60, 480) # 1 to 8 minutes
+date call = date start + timedelta(
+days=random.randint(0, 89), # over 3 months
+hours=random.randint(8, 18),
+minutes=random.randint(0, 59)
+)
+# Enrichment of the text with the mentioned product
+text complete = f&quot;[Incoming call - {date call.strftime('%d/%m/%Y%H')}] &quot; \
+f&quot;Client: {fake.name()}. Product concerned: {product}. &quot; \
+f&quot; Transcript: {template}&quot;
+
+calls.append({
+&quot;call id&quot; f&quot;CALL {call id:04d}&quot;
+Client name quot; fake.name(),
+Client email&quot; fake.email(),
+City quot; fake.city(),
+Product quot: product,
+Date call quot;: date call.strftime(&quot;%Y-%m-%d %H:%M:%S&quot;),
+dure seconds quot;: dure sec,
+&quot; sentiment reel&quot;: feeling, # field truth column (for evaluation)
+Intent:
+&quot; text transcript quot;: full text,
+})
+call id += 1
+
+random.shuffle(calls) # Mix for not having the sorted feelings
+Print(e&quot;Number of calls generated: {le(calls)}&quot;)
+print(e&quot; Distribution sentiments: {s: sum(1 for a in appeals if a['sentiment reel']==s) for s in TEMPLATES} }&quot;)
+</code></pre>
+<p><strong>Expected result: </strong></p>
+<pre><code>Number of calls generated : 120
+Distribution of feelings: {'positive': 30, 'neutral': 30, 'negative': 35, 'neglective': 25} 
+</code></pre>
+<p><a id="23-cellule-3-sauvegarde-dans-le-lakehouse"></a></p>
+<h3>2.3 — Cell 3: Backup in Lakehouse </h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-3-criterion-in-lakehouse-bronze-layer&gt;&lt;/a&gt;
+#===CELL 3 : Writing in Lakehouse (Bronze) ===
+#
+&lt;a id=&lt;--------------------------------------------------------------------------------
+# OBJECTIVE: Persist data generated in two formats:
+&lt;a id=&quot;1-file-txt-individual-in-filesaudiocalls&lt;/a&gt;
+# 1. Individual .txt files in Files/audio calls/
+&lt;a id=&t;simulating-transcripts-of-file-audio-reels&gt;&lt;/a&gt;
+# → Simulating transcripts of real audio files
+o o o o o o
+# → In production: they would be .mp3 treated by Whisper or Azure Speech
+&lt;a id=&quot;2-metadon file-in-filesmetadata&quot;&gt;&lt;/a&gt;
+#2. CSV metadata file in Files/metadata/
+All except for transcribed text
+# → Contains all columns except transcription text
+#
+&lt;a id=&quot;msparkutilsfsput-ecrit-directly-in-the-filesystem-onelake&quot;&gt;&lt;/a&gt;
+# mssparkutils.fs.put() writes directly into the OneLake file system
+&lt;a id=&quot; du-lakehouse-attached-au-notebook&t;&gt;/a&gt;
+# Lakehouse attached to the Notebook.
+&lt;a id=&quot;overwritetrue-idepotent-may-relief-without-duplicating-the-donations&gt;&lt;/a&gt;
+# overwrite=True → ideal (can be restarted without duplicated data)
+
+&lt;a id=&quot;--4&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+If you do not have a copy of the Txt file, you will have to have a copy of the Txt file.
+# WRITING OF THE TRANSCRIPTING TXT
+&lt;a id=&quot;--5&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+for call in appeals:
+path = f&quot;Files/audio calls/{call id']}.txt&quot;
+mssparkutils.fs.put(path, call[&quot;text transcript&quot;], overwrite=True)
+
+print(e&quot;) {name(calls)} .txt files written in Files/audio calls/&quot;)
+
+&lt;a id=&quot;--6&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+o o o o o o o
+# WRITING OF THE METADONATED CSV
+&lt;a id=&quot;--7&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;-use-python-native-io-csv-to-build-the-csv-in-memory&t;&lt;/a&gt;
+# Native Python (io + csv) is used to build the CSV in memory
+&lt;a id=&quot;then-mssparkutilsfsput-to-write-in-lakehouse-in-one-only-operation&gt;&lt;/a&gt;
+# then mssparkutils.fs.put() to write it in the Lakehouse in one operation.
+&lt;a id=&quot;evite-de-creer-un-file-temporary-local-tmp-ne-persist-not-quot;&gt;/a&gt;
+# Avoid creating a temporary local file (/tmp/...) that does not persist.
+
+import io, csv as csv module
+
+buffer = io.StringIO()
+Fields = [Quot; call id&quot;,client name quot;,client email quot;,ville quot;,product quot;,
+Quot;date appeal quot;,quote seconds quot;,quota reel quot;,quota intent;]
+Writer = csv module.DictWriter(buffer, fieldnames=fields, extrasaction=&quot;ignore&quot;)
+Writer.writeheader()
+Writer.writerows(calls)
+
+mssparkutils.fs.put(&quot;Files/metadata/calls metadata.csv&quot;, buffer.getvalue(), overwrite=True)
+print(&quot;) calls metadata.csv written in Files/metadata/&quot;) 
+</code></pre>
+<p><strong>Visual verification: </strong><br />
+In Lakehouse's left explorer →  <strong>Files</strong> → You need to see two folders:  <code>audio_calls/</code> (120 .txt files) and  <code>metadata/</code> (1 CSV file). </p>
+<hr />
+<p><a id="bloc-3-ingestion-bronze"></a></p>
+<h2>Bloc 3 — Ingestion Bronze</h2>
+<p><a id="31-creer-le-notebook-dingestion"></a></p>
+<h3>3.1 — Create the ingestion notebook </h3>
+<ol>
+<li>Workspace → <strong>+ New item</strong> → <strong>Notebook</strong></li>
+<li>Nommer : <code>NB_Bronze_to_Silver</code></li>
+<li>Add  <code>LH_SolarVoix</code> to Lakehouses panel </li>
+</ol>
+<p><a id="32-cellule-1-chargement-bronze-des-transcriptions"></a></p>
+<h3>3.2 — Cell 1: Bronze loading of </h3>
+<pre><code class="language-python"> transcripts. &lt;a id=&quot;cell-1-ingestion-brown-file-text&gt;/a&gt;
+===CELL 1: Bronze Ingestion — Text Files===
+#
+Objective-read-all-file-txt-of-the-folder-audiocalls/aggt;
+# OBJECTIVE: Read all .txt files in audio calls/ folder
+&lt;a id=&quot;in-one-only-operation-spark-and-create-table-bronzetranscriptions&gt;&lt;/a&gt;
+# in one Spark operation and create the bronze transcriptions table.
+#
+&lt;a id=&quot;sparkreadtext-lit-each-file-as-one-line-by-line&lt;&gt;/a&gt;
+# Spark.read.text() read each file as one line per line.
+&lt;a id=&quot;to-have-one-line-by-file-one-full-call-are-used&gt;&lt;/a&gt;
+# To have a line by FILE (= a full call), use
+&lt;a id=&quot;sparkreadformatbinaryfile-who-charge-the-file-binary-content&gt;/a&gt;
+# park.read.format(&quot;binaryFile&quot;) which loads the binary content of the file,
+&lt;a id=&quot;then-decode-en-utf-8&quot;&gt;&lt;/a&gt;
+# There we decode it into UTF-8.
+#
+&lt;a id=&quot;columns-creees-automatically-par-binaryfile&gt;/a&gt;
+# Columns created automatically by binaryFile:
+&lt;a id=&quot;path-path-complete-file-ex-abfscall0001txt&quot;&gt;&lt;/a&gt;
+# path → full file path (ex: abfss://...CALL 0001.txt)
+&lt;a id=&quot;content-gross-in-bytes&lt;/a&gt;
+# content → raw content in bytes
+&lt;a id=?Length-size-of-the-file-in-bytes&gt;/a&gt;
+# length → file size in bytes
+
+from pyspark.sql import functions as F
+
+&lt;a id=&quot;read-all-files-txt-in-mode-binaryfile&gt;/a&gt;
+# Play all .txt files in binaryFile mode
+df raw = (
+spark.read
+.format(&quot;binaryFile&quot;)
+.option(&quot;pathGlobFilter&quot;, &quot;*.txt&quot;) # filter on extension
+.load(&quot;Files/audio calls/&quot;)
+)
+
+&lt;a id=&quot;decoding-utf-8-extraction-of-callid-from-filename&gt;/a&gt;
+# UTF-8 decoding + extraction of call id from file name
+&lt;a id=&quot;fdecodecontent-utf-8-convert-les-bytes-en-chain-readable&gt;&lt;/a&gt;
+# F.decode(content, &quot;utf-8&quot;) converts bytes to readable string
+&lt;a id=&quot;fregextract-extract-call0001-since-the-full-path-of-the-file&gt;/a&gt;
+# F.regexp extract extracted &quot;CALL 0001&quot; from the full file path
+df bronze transcriptions = (
+df raw
+.withColumn(&quot;transscription text&quot;, F.decode(F.col(&quot;content&quot;))
+.withColumn(&quot;call id&quot;
+F.regexp extract(F.col(&quot;path&quot;), r&quot;(CALL \d+)\.txt&quot; 1))
+.withColumn(&quot;file size bytes&quot; F.col(&quot;length&quot;))
+.select(&quot;call id&quot;,quot text quot;,quot size bytes quot;)
+)
+
+df bronze transcriptions.write \
+.mode(&quot;overwrite&quot;) \
+.format(&quot;delta&quot;) \
+.saveAsTable(&bronze transcripts&quot;)
+
+print(e&quot;bronze transcriptions: {df bronze transcriptions.count()} line&quot;)
+df bronze transcriptions.show(3, truncate=80) 
+</code></pre>
+<p><a id="33-cellule-2-chargement-bronze-des-metadonnees"></a></p>
+<h3>3.3 — Cell 2: Loading Bronze Metadata</h3>
+<pre><code class="language-python">2-ingestion-bronze-metadonnes-csv&t;&lt;/a&gt;
+#=== CELL 2: Bronze Ingestion — CSV Metadata===
+#
+Objective-read-file-callsmetadatacsv-and-creaer-bronzecallsmetadata&quot;&gt;/a&gt;
+# OBJECTIVE: Read the file calls metadata.csv and create bronze calls metadata.
+#
+- self-detecting inferschemmatrue-detection-automatically
+# inferschema=True automatically detects:
+&lt;a id=&quot;-dateappel-timestamptype-si-format-recognized&gt;&lt;/a&gt;
+# - date call → TimestampType (if format recognized)
+&lt;a id=?dureeseconds-integertype&gt;&lt;/a&gt;
+# - duration seconds → IntegerType
+&lt;a id=&quot;-column text-stringtype&quot;&gt;&lt;/a&gt;
+# - text columns → StringType
+#
+&lt;a id=&quot;good-practice-in-production-defining-a-structtype-explicit&lt;/a&gt;
+# Good practice: in production, define an explicit StructuralType
+- to avoid big volume surprises.
+# to avoid typing surprises on large volumes.
+
+df meta = (
+spark.read
+.option(&quot;header&quot;, True)
+.option('inferSchema&quot;, True)
+.csv(&quot;Files/metadata/calls metadata.csv&quot;)
+)
+
+df meta.write \
+.mode(&quot;overwrite&quot;) \
+.format(&quot;delta&quot;) \
+.saveAsTable(&bronze calls metadata&quot;)
+
+print(e&quot;bronze calls metadata: {df meta.count()} lines&quot;)
+df meta.printSchema() 
+</code></pre>
+<p><a id="34-cellule-3-diagnostic-qualite-bronze"></a></p>
+<h3>3.4 — Cell 3: Bronze quality diagnosis </h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-3-diagnostic-qualite;&gt;&lt;/a&gt;
+#=== CELL 3 : Diagnostic quality ===
+#
+The objective-verify-lintegrity-before-start-enrichment-ia&quot;&gt;/a&gt;
+# OBJECTIVE: Check data integrity before starting IA enrichment.
+#
+&lt;a id=&quot;regle-dor-diagnostic-before-transforming&gt;/a&gt;
+# Golden Rule: Diagnose before transforming.
+&lt;a id=&quot;-verify&gt;&lt;/a&gt;
+# We check:
+&lt;a id=1-nulls-in-columns-critical&gt;&lt;/a&gt;
+# 1. None in critical columns
+&lt;a id=&quot;2-coherence-of-number-calls-120-till;&gt;&lt;/a&gt;
+#2. Consistency of number of calls (120 expected)
+3-junior-between-the-two-table-brown-callid-must-matcher&lt;/a&gt;
+#3. Joint between the two Bronze tables (call id must match)
+
+from pyspark.sql import functions as F
+
+df t = spark.table(&bronze transcriptions&quot;)
+df m = spark.table(&bronze calls metadata&quot;)
+
+AUDIT BRONZE
+print(e&quot;Transcripts: {df t.count()} lines (expected: 120)&quot;)
+print(e&quot;metadata: {df m.count()} lines (expected: 120)&quot;)
+
+&lt;a id=&quot;verification-of-null-on-transcripttext-critical-for-lia&gt;&lt;/a&gt;
+# Verification of nulls on transcription text (critical for AI)
+nulls text = df t.filter(F.col(&quot;transcription text&quot;).isNull()
+(F.length(&quot;transcription text&quot;) &lt; 10)).count()
+print(e&quot; Short or empty transcripts: {nulls text}&quot;)
+
+o o o o o o o
+# Checking the join (call ids that match)
+ids t = set(r.call id for r in df t.select(&quot;call id&quot;).collect())
+ids m = set(r.call id for r in df m.select(&quot;call id&quot;).collect())
+orphan = ids t.symmetric difference(ids m)
+print(e&quot;call ids without matching: {len(orphans)}&quot;)
+if len(orphans) 0:
+print(e&quot; Orphan IDs: {list(orphans)[:5]}&quot;)
+Else:
+print(&quot; 
+
+&lt;a id=&quot;distribution-of-feel-real-truth-truth&lt;/a&gt;
+# Distribution of real feelings (truth field)
+print(&quot;\n=) SENTIMENT DISTRIBUTION (Truth of Land)
+df m.groupBy(&quot;sentiment reel&quot;).count().orderBy(&quot;count&quot;,ascending=False).show() 
+</code></pre>
+<p><strong>Interpretation: </strong> 120 lines, no null, perfect joint. The actual distribution (25 very negative + 35 negative = 50% problematic calls) represents a VAS center under high pressure. </p>
+<hr />
+<p><a id="bloc-4-enrichissement-ia-sans-cle-api"></a></p>
+<h2>Block 4 — IA enrichment (no API key) </h2>
+<blockquote>
+<p>💡 <strong>IA architecture without external dependence: </strong> On utilise <code>transformers</code> by HuggingFace with model  <code>cardiffnlp/twitter-xlm-roberta-base-sentiment</code> — a multilingual model (including French) for sentiment analysis. It is downloaded once by the cluster, then cached. No key, no cost per call.</p>
+</blockquote>
+<p><a id="41-cellule-4-analyse-de-sentiment-ia"></a></p>
+<h3>4.1 — Cellule 4 : Analyse de sentiment IA</h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-4-sentiment analysis-with-huggingface-processors&lt;/a&gt;
+#===CELLULE 4: Sensitive analysis with HuggingFace Transformers ===
+#
+&lt;a id=&quot;objective-attribute-a-net-neutral-positive-feeling score-quot;&gt;&lt;/a&gt;
+# OBJECTIVE: Assign a (positive/neutral/negative) sentiment score
+&lt;a id=&quot;a-each-transcription-via-a-pre-training model&gt;&lt;/a&gt;
+# with each transcription via a pre-entry NLP model.
+#
+&lt;a id=&quot;modele-cardiffnlptwitter-xlm-roberta-base-sentiment&gt;&lt;/a&gt;
+# Model: cardiffnlp/twitter-xlm-roberta-base-sentiment
+&lt;a id=&quot;-on-198-million-tweets-in-100-languages-of which-the-english-quot;&lt;/a&gt;
+# → Driven on 198 million tweets in 100 languages including French
+&lt;a id=&quot;labs-negative-neutral-positive-quot;&gt;&lt;/a&gt;
+# → Labels: negative / neutral / positive
+A id=&quot;size-280-mb-telecharge-automatically-to-first-call&gt;/a&gt;
+# → Size: ~280 MB (downloaded automatically at first call)
+#
+&lt;a id=&quot;strategy-execution&lt;/a&gt;
+# Implementation Strategy:
+&lt;a id=&quot;-collection-transcriptions-in-driver-120-texts-courts-ok&quot;&lt;/a&gt;
+# - We collect the transcripts in the driver (120 short texts = OK)
+&lt;a id=&quot;-apply the-pipeline-nlp-en-batch-on-the-driver&gt;&lt;/a&gt;
+# - We're applying the NLP pipeline to the driver.
+If we were to use a-udf-spark-distributed&gt;&lt;/a&gt;
+# - For millions of documents, we would use a distributed UDF Spark
+#
+&lt;a id=&quot;truncationtrue-maxlength512-transcriptions-long-trunqes-are-trunq;&gt;&lt;/a&gt;
+# truncation=True, max length=512 → long transcripts are truncated
+&lt;a id=&quot;a-512-tokens-limite-du-modele-bertroberta&quot;&gt;&lt;/a&gt;
+# to 512 tokens (limit of the BERT/RoBERTa model)
+
+from transforms import pipeline as hf pipeline
+
+print(&quot; Loading the sentiment model (first time: ~1 min)...
+
+&lt;a id=&quot;model-nlptownbert-base-multilingual-uncased-sentiment&gt;&lt;/a&gt;
+# Model: nlptown/bert-base-multilingual-uncased-sentiment
+&lt;a id=&quot;tokenizer-bert-standard-wordpiece-no dependency-sentencepiece&gt;&lt;/a&gt;
+# Tokenizer BERT standard (WordPiece) — no dependency sentencepiece
+- French-trained-on-6-languages-quot;
+# Supports native French (entered into 6 languages)
+1-star-a-5-stars-quot;
+# Release labels: 1 star quot; 5 stars quot;
+feeling pipeline = hf pipeline(
+Sentiment-analysis quot;
+model=&quot;nlptown/bert-base-multilingual-uncased-sentiment&quot;
+device=1,
+truncation=True,
+max length=512
+)
+
+print(&quot;Loaded model 
+
+rows = spark.table(&bronze transcriptions&quot;).collect()
+text = [r.transcription text for r in rows]
+call ids = [r.call id for r in rows]
+
+result sentiment = sentiment pipeline(texts, batch size=16)
+
+&lt;a id=&quot;mapping-1-2-negative-3-neutral-4-5-positive-stars&gt;&lt;/a&gt;
+# Mapping: 1-2 stars → negative
+def mapper sentiment(label: str) -&gt; str:
+nb = int(label[0])
+if nb &lt;= 2:
+Return to negative quot;
+Elif nb== 3:
+Return quot;
+Else:
+positive quot;
+
+results = []
+for call id, text, res in zip(call ids, texts, results sentiment):
+sentiment ia = mapper sentiment(res[&quot;label&quot;])
+score confidence = round(res[&quot;score&quot;], 4)
+results. append({
+&quot;call idquot;: call id,
+&quot; feeling: feeling ia,
+&quot; score sentiment&quot;: score trust,
+})
+
+print(e&quot;\nAnalysis completed: {the(results)} calls processed&quot;)
+First five-results per capita;
+# Overview of the first 5 results
+for r in results[:5]:
+print(e&quot; {r['call id']} → {r['sentiment ia']} (trust: {r['score sentiment']})&quot;) 
+</code></pre>
+<p><a id="42-cellule-5-detection-dintention-et-score-de-risque-churn"></a></p>
+<h3>4.2 — Cell 5: Intent Detection and Churn Risk Score</h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-5-detection-intention-by-regles-calculation-of-score-churnquot;&gt;/a&gt;
+#=== CELL 5: Intent detection by rules + calculation of the churn score ===
+#
+Objective-two-additional enrichments
+# OBJECTIVE: Two complementary enhancements:
+&lt;a id=&quot;1-intentdetect-category-intent-base-on-word-key-metier&lt;/a&gt;
+# 1. intent detect: category of intent based on business keywords
+&lt;a id=&quot;plus-rapid-and-explicable-quun-model-nlp-for-classification-metier&lt;&lt;/a&gt;
+# (faster and more explainable than a NLP model for trade classification)
+&lt;a id=&quot;2-scoreriskchurn-score-de-0-a-100-combining-several-signals&gt;&lt;/a&gt;
+#2. score risk churn : score from 0 to 100 combining several signals
+#
+&lt;a id=&quot;logique-du-score-risk-churn&quot;&gt;/a&gt;
+# Churn risk score logic:
+-50-points quot;
+# - IA feeling very negative: +50 points
+&lt;a id=&quot;-sentiment-ia-negative-25-points&gt;&lt;/a&gt;
+# - IA negative feeling: +25 points
+• a id=&quot;-mots-de-reliation-30-points&gt;/a&gt;
+# - Words of termination: +30 points
+&lt;a id=&quot;-threatwords-lawyer-dgccrf-20-points&gt;&lt;/a&gt;
+# - Threat words (lawyer, DGCCRF): +20 points
+&lt;a id=&quot;-duree-5-minutes-frustration-extension-10-points&gt;&lt;/a&gt;
+# - Duration & gt; 5 minutes (extended frustration): +10 points
+&lt;a id=&quot;-score-plafonne-a-100&gt;&lt;/a&gt;
+# - Score capped at 100
+#
+This form-is-delivery-simple-and-explainable-quot;
+# This formula is deliberately simple and explainable.
+It would be richer-with-historic-crm-of-client-quot;&gt;&lt;/a&gt;
+# In production, it would be enriched with the customer's CRM history.
+
+import
+
+&lt;a id=&d;dictionary-words-by-intention-metier&lt;&gt;/a&gt;
+# Dictionary of keywords by business intent
+KEYWORDS INTENT = {
+"Quotation" means:
+Legal threat quot;: [Quot; lawyer quot; quot; complaint quot; quot; dgccrf; quot; ombudsperson quot; quot; quot; juridique quot;],
+"Quotation" means the amount of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the sum of the
+Technical complaint quot;: [Quott, quot does not work quot;, quat, quot; defaint quot;, quot;]
+[Quotation not called, person not quot, unacceptable quot, scandalous quot],
+"Quot; question invoicing&quot;:[&quot;invoicing&quot;,quota,quota,quota;]
+Follow-up quot;: [delivery quot; time quot; date quot; quart; wait quot;]
+&quot; satisfaction quot: [thank you, excellent quot, perfect quot, satisfied quot, recommend quot;]
+Information quot;: [information quot; education quot; knowledge quot; understand quot;],
+}
+
+def detect intention(text: str) -&gt; str:
+&quot; & quot; Returns the first identified intent in order of priority. & quot;
+text lower = text.lower()
+# Priority: Critical intentions first
+Priority = [Quotation, Quot., Legal Threat, Quot.
+Technical complaint, complaint, question invoicing,
+Monitoring, satisfaction quot; information quot;]
+forintent in priority:
+for kw in KEYWORDS INTENT:
+if kw in text lower:
+return intent
+return &quot; other quot;
+
+def compute score churn(sentiment: str, text: str, duration sec: int) -&gt; int:
+&quot; & quot;
+Calculates a churn risk score between 0 and 100.
+The higher the score, the greater the risk that the client will leave.
+&quot; & quot;
+score = 0
+text lower = text.lower()
+
+# Signal 1: Feeling IA (high base — feeling is the strongest signal)
+if sentiment * negative quot;
+score += 40
+
+# Signal 2: Explicit termination words
+words resil = [Quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot;]
+if any(m in text lower for m in words resil):
+score += 30
+
+# Signal 3: Legal or institutional threats
+words threat = [&quot; counsel, quot; complaint, quot;dgccrf&quot;, quot; ombudsperson, quot; quot;
+if any(m in text lower for m in words threat):
+score += 20
+
+# Signal 4: Explicit technical or VAS complaint
+words complaint = [?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+Inadmissible quot; three times quot; five times quot; not call;]
+if any(m in text lower for m in words complaint):
+score += 15
+
+# Report 5: Extended duration (&gt;5 min = insistent client = serious problem)
+if duration sec &gt; 300:
+score += 10
+
+# Up to 100
+return min(score, 100)
+
+&lt;a id=&quot;--8&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;application-on-120-calls&gt;&lt;/a&gt;
+# APPLICATION ON THE 120 CALLS
+&lt;a id=&quot;--9&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+o o o o o o o o o
+# Feel results are joined with metadata (duration)
+df meta pd = park.table(&quot;bronze calls metadata&quot;).toPandas()
+df meta dict = {r[&quot;call id&quot;]: r for  , r in df meta pd.iterrows()}
+
+for r in results:
+text = next(t for c, t in zip(call ids, texts) if c âEUR" r[&quot;call id&quot;])
+meta = df meta dict.get(r[&quot;call id&quot;], {})
+duration = meta.get(&quote seconds&quot;, 0)
+
+= detect intent(text)
+r[&quot;score risk churn&quot;] = calculate score churn(r[&quot;sentiment ia&quot;], text, duration)
+r[&quot; critical alert&quot;] = r[&quot;score risk churn&quot;] &gt;= 50 # Boolean for Activator (Part 2)
+
+Quick statisticians
+# Rapid statistics
+scores = [r[&quot;score risk churn&quot;] for in results]
+alerts = sum(r[d] for in results)
+print(e&quot; Average churn score: {sum(scores)/len(scores):.1f}/100&quot;)
+print(e&quot; Maximum churn score: {max(scores)}/100&quot;)
+print(e&quot;Critical alert calls (score ≥ 50): {alerts}&quot;) 
+</code></pre>
+<p><strong>Professional interpretation: </strong> Average score of 31.8/100, 20 critical alerts (score ≥ 50) out of 120 calls or 16.7%. The maximum score of 85 corresponds to calls combining negative feeling + termination words + legal threat — these are the cases to be treated as a top priority within 24 hours. Each alert represents a risk of loss estimated at €2,000–8000 of recurring contracts (maintenance, renewal, extension). </p>
+<blockquote>
+<p>💡 <strong>Model note IA: </strong> The model <code>nlptown</code> is binary in practice: it classifies neutral AND very negative calls all as "negative". This is visible in the consistency matrix (neutral → negative: 30 cases). This limitation is compensated by the detection of keywords (Cellule 5), which discriminates gravity levels via the churn score. </p>
+</blockquote>
+<hr />
+<p><a id="bloc-5-creation-de-la-couche-silver"></a></p>
+<h2>Block 5 — Creating the Silver </h2>
+<p><a id="51-cellule-6-jonction-et-ecriture-silver"></a></p>
+<h3> layer. 5.1 — Cell 6: Junction and writing Silver </h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-6-construction-de-la-table-silver-quot;&gt;&lt;/a&gt;
+#===CELLULE 6: Silver Table Construction ===
+#
+&lt;a id=&t;Objective-Creer-Silvercallsenriched-attaching&gt;&lt;/a&gt;
+# OBJECTIVE: Create silver enriched calls by joining:
+&lt;a id=&quot;-bronzecallsmetadata-information-client-product-date&gt;&lt;/a&gt;
+# - bronze calls metadata (customer information, product, date)
+&lt;a id=&quot;-results-enrichment-ia-sentiment-intent-churn&t;&lt;/a&gt;
+# - IA enrichment results (sentiment, intent, churn)
+#
+o a id=???????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# Silver layer = clean + enriched data, ready for report.
+&lt;a id=&quot;e-written-in-delta-partitioning-by-sentimentia-to-accelerate&gt;&lt;/a&gt;
+# We write in Delta → partitioning by sentiment ia to speed up
+&lt;a id=&quot;les-requetes-filtrees-in-power-bi-quot;&gt;&lt;/a&gt;
+# filtered requests in Power BI.
+#
+Table Final Columns
+# Silver Table Final Columns:
+&lt;a id=&quot;callid-clientname-clientemail-city-product&gt;&lt;/a&gt;
+# call id, client name, customer email, city, product
+&lt;a id=?quot;datecall-dueseconds-dueminutes-calculated?gt;&lt;/a?gt;
+# date call, duration seconds, duration minutes (calculated)
+&lt;a id=&quot;sentimentia-scoresentiment&gt;&lt;/a&gt;
+# feeling ia, score sentiment
+o o o o o o o
+# detect, score risk churn, critical alert
+(a) id=??????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# (feel reel, real intention → field truth columns for audit)
+
+from pyspark.sql import Row
+import pyspark.sql.functions as F
+
+&lt;a id=&quot;list conversion-python-dataframe-spark&quot;&gt;&lt;/a&gt;
+# Python List Conversion → DataFrame Spark
+df enrichi = spark.createDataFrame([Row(**r) for r in results])
+
+(a) attached-with-metadon-bronze quot;
+# Joined with Bronze Metadata
+df meta spark = park.table(&quot;bronze calls metadata&quot;)
+
+df silver = (
+df meta spark
+.join(df enrichi, on=&quot;call id&quot;, how=&quot;inner&quot;)
+
+# Calculation of duration in minutes (rounded 1 decimal place) for business readability
+.withColumn(&quote minutes&quote,
+F.round(F.col(&duree seconds&quot;) / 60.0, 1))
+
+# Date Conversion to Timestamp Type for Power BI
+.withColumn(&quot;date call&quot;, F.to timestamp(&quot;date call&quot;))
+
+# Extraction day of the week (1=Monday ... 7=Sunday) for analysis
+.withColumn(?daily week quot; F.dayofweek(?daily call quot;))
+
+# Extract time to scan call peaks
+.withColumn(&quote call time, F.hour(&quote call date))
+
+# Business time range (morning / afternoon / end of day)
+.withColumn(&daily hourly,
+F.when(F.col(&quoth call hour) &lt; 12,Quoted)
+.when(F.col(&quoth call hour) &lt; 17, afternoon quot;)
+.otherwise('End of day))
+
+# Selection and order of final columns
+.select(
+& quot; call id quot;, client name quot;, client email quot;, city quot;, product quot;
+•Quot;date call quot;,dure seconds quot;,dure minutes quot;
+&quot; per week,
+&quot; feeling, feeling,
+o a critical alert,
+&quot; real,dailyintention # audit columns
+)
+)
+
+&lt;a id=&quot;criture-silver-partitione-par-sentimentia&t;&gt;/a&gt;
+# Silver Writing partitioned by sentiment ia
+&lt;a id=&quot;advantage-power-bi-en-mode-direct-lake-lit-only-distribution-filtrees&gt;&lt;/a&gt;
+# Advantage: Power BI in Direct Lake mode only reads filtered partitions
+df silver.write \
+.mode(&quot;overwrite&quot;) \
+.format(&quot;delta&quot;) \
+DistributionBy(&quot;feel ia&quot;) \
+.saveAsTable
+
+print(e&quot;silver calls enriched: {df silver.count()} lines&quot;)
+print(&quot; IA sentiment distribution:
+df silver.groupBy(&quot;sentiment ia&quot;).count().orderBy(&quot;count&quot;,ascending=False).show() 
+</code></pre>
+<p><a id="52-cellule-7-controle-qualite-silver"></a></p>
+<h3>5.2 — Cell 7: Quality control Silver </h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-7-control-qualite-silver quot;&gt;/a&gt;
+#=== CELL 7: Silver Quality Control ===
+#
+&lt;a id=&quot;Objective-validate-table-quality-silver-before-pass-a-visuali&lt;/a?gt;
+# OBJECTIVE: Validate the quality of the Silver table before switching to visualization.
+&lt;a id=&quot;-verify-distributions-scores-extreme-and-coherence-metier&lt;/a&gt;
+# We check distributions, extreme scores, and business consistency.
+
+df s = spark.table(&quot;silver calls enriched&quot;)
+
+SILVER QUALITY CONTROL
+
+&lt;a id=1-nulls-on-columns-critical&gt;&lt;/a&gt;
+# 1. None on critical columns
+Critical cols = [&quot;sentiment ia&quot;,quot detect quot;,quot risk churn&quot;]
+for cols critiques:
+nulls = df s.filter(F.col(col).isNull()).count()
+status = &quot;  if nulls = 0 elves 
+print(e&quot; {status} {col}: {nulls} nulls&quot;)
+
+&lt;a id=&quot;2-distribution-scores-churn&quot;&gt;/a&gt;
+#2. Distribution of churn scores
+print(&quot;\n--- Distribution score risk churn ---&quot;)
+df s.select(
+F.min(&quot;score risk churn&quot;).alias(&quot;)
+F.max(&quot;score risk churn&quot;).alias(&quot;max&quot;),
+F.avg(&quot;score risk churn&quot;).alias(?average quot;)
+F.percentile approx(&quot;score risk churn&quot; 0.75).alias(&quot;p75&quot;),
+F.percentile approx(&quot;score risk churn&quot; 0.99).alias(&quot;p90&quot;),
+)show()
+
+&lt;a id=&quot;3-calls-on-warning-critical-per-product&gt;&lt;/a&gt;
+#3. Critical alert calls by product
+print(&quot;---- Product critical alerts ---&quot;)
+df s.filter(F.col(&quot; critical alert&quot;) == True) \
+.groupBy(&quote) \
+.count() \
+.orderBy(&quot;count&quot;,ascending=False) \
+.show()
+
+&lt;a id=&quot;4-coherence-sentiment-ia-vs-sentiment-reel-matrice-de-confusion-simplified-quot;&gt;&lt;/a&gt;
+#4. Consistency: feeling IA vs. feeling real (matrix of simplified confusion)
+print(&quot;--- Coherence IA vs. truth field ---&quot;)
+df s.groupBy(&quote reel&quote, &quote ia&quot;).count() \
+.orderBy(&quot;feel reel&quot;,quot;feel iaquot;) \
+.show() 
+</code></pre>
+<p><strong>Interpretation: </strong> The matrix confirms that the model is perfect on positive calls (30/30) and really negative calls (35/35). On the other hand, it ranks the 30 neutral calls and the 25 very negative all in "negative" — behavior expected for a generalistic model. The column  <code>score_risque_churn</code> (Cell 5) takes over to discriminate against severity levels in negative calls. </p>
+<hr />
+<p><a id="bloc-6-visualisations-analytiques"></a></p>
+<h2>Bloc 6 — Visualisations analytiques</h2>
+<p><a id="61-creer-le-notebook-de-visualisations"></a></p>
+<h3>6.1 — Create the Notebook of visualisations </h3>
+<ol>
+<li>Workspace → <strong>+ New item</strong> → <strong>Notebook</strong></li>
+<li>Nommer : <code>NB_Visualizations</code></li>
+<li>Add <code>LH_SolarVoix</code></li>
+</ol>
+<p><a id="62-cellule-1-imports-et-chargement"></a></p>
+<h3>6.2 — Cell 1: Imports and loading </h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-1-load-for-view&gt;&lt;/a&gt;
+#===CELLULE 1: Loading data for visualization ===
+#
+&lt;a id=&quot;on-convert-la-table-silver-en-pandas-dataframe-for-seabornmatplotlib&quot;&gt;/a&gt;
+# The Silver table is converted to Pandas DataFrame for seaborn/matplotlib.
+&lt;a id=&quot;acceptable here-120-lines-to-from-100k-lines-use-aggregates-spark&quot;&gt;/a&gt;
+# Acceptable here: 120 lines. Beyond 100K lines, use Spark aggregates.
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.icker as mticker
+import seaborn as sns
+import wars
+warnings.filterwarnings(&quot;ignore&quot;)
+
+&lt;a id=&quot;style-coherent-for-all-figures&gt;&lt;/a&gt;
+# Coherent style for all figures
+sns.set theme(style=&quot;whitegrid&quot;, palette=&quot;muted&quot;, font scale=1.1)
+COLOURS SENTLY = {
+Positive quot;:
+•Quoted:
+Negative quot:
+}
+
+df = park.table(&quot;silver appeals enriched&quot;).toPandas()
+df[&quot;date call&quot;] = pd.to datetime(df[&quot;date call&quot;])
+
+&lt;a id=&quot;convert-integersbooleans-nullable-pandas-int32-int64-boolean-en-float-numpy&quot;&gt;/a&gt;
+# Convert integers/booleans nullable Pandas (Int32, Int64, boolean...) to float numpy
+&lt;a id=&quot;compatibility-matplotlibseaborn-ufunc-isfinite&gt;&lt;/a&gt;
+# → matplotlib/seaborn compatibility (ufunc isfinite)
+&lt;a id=&quot;-excluded-stringdtype-not-cut-columns-text-quot;&gt;&lt;/a&gt;
+# Excludes StringDtype to avoid overwriting text columns
+for col in df.columns:
+if pd.api.types.is extension array dtype(df[col]) and pd.api.types.is numeric dtype(df[col]):
+df[col] = df[col].astype(float)
+
+df[&quot;week quot;] = df[&quot;date call&quot;].dt.isocalendar().week.astype(float)
+
+print(e&quot;Data loaded: {n(df)}calls&quot;) 
+</code></pre>
+<p><a id="63-cellule-2-tableau-de-bord-sentiment-churn"></a></p>
+<h3>6.3 — Cell 2: Scoreboard sentiment + churn</h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-2-dashboard-4-views&gt;&lt;/a&gt;
+#=== CELL 2: Dashboard 4 visualizations ===
+#
+&lt;a id=&quot;viz-1-distribution-of-feel-donut-quot;&gt;&lt;/a&gt;
+# VIZ 1 : Distribution of feelings (donut chart)
+&lt;a id=&quot;viz-2-score-churn-per-product-boxplot&quot;&gt;&lt;/a&gt;
+# VIZ 2 : Churn score by product (boxplot)
+&lt;a id=&quot;viz-3-evolution-temporal-alerts-lineplot-weekly&gt;&lt;/a&gt;
+# VIZ 3 : Temporal evolution of alerts (weekly lineplot)
+&lt;a id=&quot;viz-4-heatmap-hour-intention-who-call-when-and-why-quot;&gt;&lt;/a&gt;
+# VIZ 4: Heatmap hour × intention (which calls when and why)
+
+Fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+Fig.suptitle(&quot;SolarVoix — Analysis of 120 client calls, fontsize=16, fontweight=&quot;bold&quot;, y=1.01)
+
+&lt;a id=&quot;--10&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;viz-1-donut-distribution-of-feelings-ia&quot;&gt;&lt;/a&gt;
+# VIZ 1 : Donut — Distribution of feelings IA
+&lt;a id=&quot;--11&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+ax1 = axes[0, 0]
+count sent = df[&quot;sentiment ia&quot;].value counts()
+color = [Colours SENTIMENT.get(s, &quot;#95A5A6&quot;) for s in counts sent.index]
+wedges, texts, autotexts = ax1.pie(
+counts sent.values, labels=counts sent.index,
+autopct=&quot;%1.0f%%&quot;, colors=colors,
+Wedgeprops={&quot;width&quot; 0.5}, # width &lt; 1 → donut
+startangle=90
+)
+for at in autotexts:
+at.set fontsize(11)
+ax1.set title(&quot;Distribution of feelings (AI)&quot;, fontweight=&quot;bold&quot;)
+
+&lt;a id=&quot;--12&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;viz-2-boxplot-score-churn-per-product&gt;&lt;/a&gt;
+# VIZ 2 : Boxplot — Churn score by product
+&lt;a id=&quot;--13&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+ax2 = axes[0, 1]
+order products = df.groupby(&quot;product&quot;)[&quot;score risk churn&quot;].median() \
+.sort values(ascending=False).index
+sns.boxplot(data=df, x=&quot;product&quot;, y=&quot; score risk churn&quot;
+order=order products, ax=ax2,
+palette=&quot;reds&quot;, linewidth=1.5)
+ax2.axhline(50, color=&quot;red&quot;, linestyle=&quot;--&quot;, linewidth=1, label=&quot; Alert threshold (50)
+ax2.set title(&quot;Curn Risk Score by Product, fontweight=&quot;bold&quot;)
+ax2.set xlabel(&quot;&quot;)
+ax2.set ylabel(&quot; Churn score (0-100)
+ax2.stick params(axis=&quot;x&quot;, rotation=20)
+ax2.legend(fontsize=9)
+
+&lt;a id=&quot;--14&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;viz-3-lineplot-critical alerts-per-week&gt;&lt;/a&gt;
+# VIZ 3: Lineplot — Critical Alerts per Week
+&lt;a id=&quot;--15&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+ax3 = axes[1, 0]
+alerts week = (
+df[df[df[&quot; critical alert&quot;]]]
+.groupby(&quote)
+.size()
+.reset index(name=&quot alerts&quot;)
+)
+sns.lineplot(data=alerts week, x=&quot;week, y=&quot alerts&quot;
+ax=ax3, marker=&quot;, color=&quot;#E74C3C&quot;, linewidth=2)
+ax3.fill between(weekly alerts[&quot;weekly quot;], weekly alerts[&quot alerts&quot;],
+alpha=0.15, color=&quot;#E74C3C&quot;)
+ax3.set title(&quot;Critical alerts per week (score ≥ 50)&quot; fontweight=&quot;bold&quot;)
+ax3.set xlabel(&quot;Week of the year)
+Number of alerts
+ax3.yaxis.set major locator(mticker.MaxNLocator(integer=True))
+
+&lt;a id=&quot;--16&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;viz-4-heatmap-intentions-by-tranche-hourly&gt;&lt;/a&gt;
+# VIZ 4 : Heatmap — Intentions per hour
+&lt;a id=&quot;--17&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+ax4 = axes[1, 1]
+pivot = (
+df.groupby([twice-hourly,daily])
+.size()
+.unstack(fill value=0)
+)
+&lt;a id=&quot;ensure-6-intentions-the-most-consequently-for-readability&gt;&lt;/a&gt;
+# Keep 6 most frequent readability intentions
+top6 intents = df[&quot;intent detect&quot;].value counts().head(6).index
+pivot = pivot[[c for c in top6 intents if c in pivot.columns]]
+
+sns.heatmap(pivot, annot=True, fmt=&quot;, cmap=&quot;YlOrRd&quot;,
+linewidths=0.5, ax=ax4, cbar kws={&quot;label&quot; &quot;Nb calls&quot;})
+ax4.set title(&quot;Intentions per hour, fontweight=&quot;bold&quot;)
+ax4.set xlabel(&quot;&quot;)
+ax4.set ylabel(&quot;&quot;)
+ax4.stick params(axis=&quot;x&quot;, rotation=30)
+
+plt.night layout()
+plt.savefig(&quot;/tmp/dashboard solarvoix.png&quot;, dpi=150, bbox inches=&quot;night&quot;)
+plt.show()
+(Dashboard saved) 
+</code></pre>
+<p><strong>Interpretation of visualizations: </strong></p>
+<p><strong>Donut — Distribution of feelings </strong></p>
+<ul>
+<li><strong>75% negative calls </strong> The model absorbs the neutrals in "negative" (behavior expected, discussed in Cell 7) </li>
+<li><strong>Aucune nuance de gris</strong> : signal that a 2-class model requires the churn score to discriminate against </li>
+<li><strong>25% positifs</strong>  gravity levels. exactly match the 30 satisfaction calls generated — </li>
+</ul>
+<p><strong>Boxplot — Score churn par produit</strong></p>
+<ul>
+<li><strong>Batterie stockage</strong>  consistency validation.: highest median (~35) and 85 outlier — recent technology, less mature VAS </li>
+<li><strong>All products </strong> remain below threshold 50 in median → alerts come from  <strong>extreme values </strong> (whiskers), not average</li>
+<li><strong>Borne recharge VE</strong> The most widespread distribution — very heterogeneous customer profiles (technology novices vs early adopters) </li>
+</ul>
+<p><strong>Lineplot — Alertes critiques par semaine</strong></p>
+<ul>
+<li><strong>Pic week 40 and 44 </strong> : corresponds to the first temperature decreases — PAC and heating required, rising incidents </li>
+<li><strong>Maximum 3 alertes/semaine</strong> On this volume of 120 calls — in real production (500+ calls/sem), the curve will be much more critical </li>
+<li><strong>Creux semaine 49</strong> : may reflect a period of less activity (free) or a bias of the </li>
+</ul>
+<p><strong>Heatmap — Intentions par tranche horaire</strong></p>
+<ul>
+<li><strong><code>plainte_technique</code>  random generator. afternoon (24) </strong> : customers notice the breakdowns when returning home — predictable and actionable peak (strengthening the VAS from 2pm to 6pm) </li>
+<li><strong><code>menace_juridique</code> concentrated afternoon (13) </strong> : frustrated customers climb at the end of the day — critical intervention window before 5pm </li>
+<li><strong>Morning dominated by  <code>plainte_technique</code></strong> : problems detected the night before, call made from the opening of the </li>
+</ul>
+<p><a id="64-cellule-3-visualisation-de-la-matrice-de-performance-ia"></a></p>
+<h3> center. 6.4 — Cell 3: Visualization of the IA </h3>
+<pre><code class="language-python"> Matrix performance. &lt;a id=&quot;cell-3-evaluation-de-la-qualite-du-modele-iaquot;&gt;&lt;/a&gt;
+CELL 3: Quality assessment of the IA model
+#
+&lt;a id=&quot;objective-view-confusion-feel-ia-vs-reel-quot;&gt;/a&gt;
+# OBJECTIVE: Visualize confusion matrix (IA vs. real feeling)
+&lt;a id=&quot;to-measure-model reliability-on-our-data-metier&gt;/a&gt;
+# to measure the reliability of the model on our business data.
+
+from sklearn.metrics import confusion matrix, classification report
+import numpy as np
+
+&lt;a id=&quot;filter-the-lines-with-missing-values-in-columns-sentiment&gt;/a&gt;
+# Filter rows with missing values in sentiment columns
+df cm = df.dropna(subset=[&quot;sentiment real, &quot;]).copy()
+
+&lt;a id=&quot;on-mapping-negative-negative-for-comparison&gt;/a&gt;
+# Map &quot; very negative → Negative quot; for comparison
+&lt;a id=&quot;the-model-huggingface-na-qu-3-classes&gt;/a&gt;
+# (HuggingFace model has only 3 classes)
+df cm[&quot;feel real 3classes&quot;] = df cm[&quot;feel realquot;].astype(str.replace(
+{&quot; Other negative: }
+)
+
+labels = [positive quot, neutral quot, negative quot;]
+y true = df cm[&quot;feel real 3classes&quot;]
+y pred = df cm[&quote].astype(str)
+
+cm = confusion matrix(y true, y pred, labels=labels)
+print(e&quot;Lines used for matrix: {len(df cm)} / {len(df)}&quot;)
+
+fig, ax = plt.subplots(figsize=(8, 6))
+sns.heatmap(cm, annot=True, fmt=&quot;, cmap=&quot;Bluesquot;
+xticklabels=labels, yticklabels=labels,
+linewidths=0.5, ax=ax)
+ax.set xlabel(&quot;Prediction IA&quot; fontsize=12)
+ax.set ylabel(&quot;Verite terrain&quot; fontsize=12)
+ax.set title(&quot;Confusion Matrix — Feeling model, fontweight=&quot;bold&quot;)
+plt.night layout()
+plt.show()
+
+Print(&quot;\n=== CLASSIFICATION REPORT ===
+print(classification report(y true, y pred, labels=labels)) 
+</code></pre>
+<p><strong>Interpretation: </strong> An overall accuracy of 70-80% is expected with this generalistic model. False negatives (neutral negative calls) are more problematic for the job than false positives — a missed churn costs more than a false alarm. </p>
+<hr />
+<p><a id="bloc-7-optimisation-de-la-table-silver-optionnel-mais-recommande"></a></p>
+<h2>Block 7 — Silver Table Optimization (optional but recommended) </h2>
+<blockquote>
+<p>⚠️ <strong>Notebook concerned:  <code>NB_Bronze_to_Silver</code></strong> — This cell does not run  <strong>pas</strong> in  <code>NB_Visualizations</code>Return to the  <code>NB_Bronze_to_Silver</code>  notebook. and add this cell to it following cells 1 to 7 already created. The numbering "Cellule 8" is the direct continuation of this notebook. </p>
+</blockquote>
+<p><a id="71-cellule-8-optimize-et-vacuum-dans-le-notebook-nbbronzetosilver"></a></p>
+<h3>7.1 — Cell 8: OPTIMIZE and VACUUM  <em>(in Notebook NB Bronze to Silver) </em></h3>
+<p>Go to the  <strong>NB_Bronze_to_Silver</strong>  notebook and add the 8 </p>
+<p> cell. Here is the reasoning: </p>
+<p>The numbering of cells in the workshop follows the  <code>NB_Bronze_to_Silver</code>, pas <code>NB_Visualizations</code> :</p>
+<table>
+<thead>
+<tr>
+<th>Notebook</th>
+<th>Cellule</th>
+<th>Bloc</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NB_Bronze_to_Silver</td>
+<td>1, 2, 3</td>
+<td>Bloc 3 (ingestion Bronze)</td>
+</tr>
+<tr>
+<td>NB_Bronze_to_Silver</td>
+<td>4</td>
+<td>Bloc 4 (sentiment IA)</td>
+</tr>
+<tr>
+<td>NB_Bronze_to_Silver</td>
+<td>5, 6, 7</td>
+<td>Bloc 5 (intent + Silver + QC)</td>
+</tr>
+<tr>
+<td>NB_Visualizations</td>
+<td><strong>1, 2, 3</strong></td>
+<td>Bloc 6 (visualisations)</td>
+</tr>
+<tr>
+<td>NB_Bronze_to_Silver</td>
+<td><strong>8</strong></td>
+<td>Bloc 7 (OPTIMIZE/VACUUM)</td>
+</tr>
+</tbody>
+</table>
+<p> notebook. The  <strong>Cellule 8</strong> logically belongs to  <code>NB_Bronze_to_Silver</code> (cont'd from cells 1→7), not  <code>NB_Visualizations</code>The OPTIMIZE/VACUUM applies to the Silver table we just wrote — it would be inconsistent to put it in the visualization notebook. </p>
+<p><strong>Conclusion :</strong> Block 7 should have had a title indicating  <code>NB_Bronze_to_Silver</code> (like Block 3). The numbering starts at 1 for  <code>NB_Visualizations</code> (Bloc 6), then resume at 8 to continue  <code>NB_Bronze_to_Silver</code> — it is just a lack of clarity in the drafting. </p>
+<pre><code class="language-python">&lt;a id=&quot;cell-8- optimisation-delta&quot;&lt;/a&gt;
+#=== CELL 8: Delta Optimization ===
+#
+&lt;a id=&quot;objective-optimize-table-silver-for-lectures-power-bi-direct-lake&gt;&lt;/a&gt;
+# OBJECTIVE: Optimize Silver Table for Power BI Direct Lake readings.
+#
+&lt;a id=&quot;optimize-compact-small-file-parquet-file-of-128-256-mb&t;&lt;/a&gt;
+OPTIMIZE: Compacts small Parquet files into ~128-256 MB files
+The number of file-read-for-power-biquot;&gt;&lt;/agt;
+# → reduces the number of files to play for Power BI
+Id=?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+# → improves query times
+#
+&lt;a id=&quot;vacuum-7-day-deleted-old-file-delta-non-references&gt;&lt;/a&gt;
+# VACUUM (7 days): Removes old unreferenced Delta files
+&lt;a id=&quot;liber-lespace-de-stocking-onelake&quot;&gt;&lt;/a&gt;
+# → releases OneLake storage space
+If you have-time-travel-active&gt;&lt;/a&gt;
+No, no. Do not descend within 7 days if you have active Time Travel
+
+spark.sql(&quot;OPTIMIZE silver calls enriched&quot;)
+(OPTIMIZE completed)
+
+Spark.sql(&quot;VACUUM silver calls enriched RETAIN 168 HOURS&quot;)
+print( & quot;VACUUM completed)
+
+Table statistics after optimization
+# Table statistics after optimization
+Spark.sql(&quot;DESCRIBE DETAIL silver calls enriched&quot;) \
+.select(&quot;numFiles&quot;,quot;sizeInBytes&quot;,distribution) \
+.show(truncate=False) 
+</code></pre>
+<hr />
+<p><a id="recapitulatif-de-la-partie-1"></a></p>
+<h2>Summary of Part 1 </h2>
+<table>
+<thead>
+<tr>
+<th>Step </th>
+<th>Outil</th>
+<th>Result </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Data generation </td>
+<td>Python / Faker</td>
+<td>120 realistic synthetic calls </td>
+</tr>
+<tr>
+<td>Ingestion Bronze</td>
+<td>Spark binaryFile + CSV</td>
+<td>2 tables Delta Bronze</td>
+</tr>
+<tr>
+<td>Analyse sentiment</td>
+<td>HuggingFace Transformers</td>
+<td>sentiment_ia + score_sentiment</td>
+</tr>
+<tr>
+<td>Intent detection </td>
+<td>Rules</td>
+<td></td>
+</tr>
+</tbody>
+</table></main>
+</body>
+</html>

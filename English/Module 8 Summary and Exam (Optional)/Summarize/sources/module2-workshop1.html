@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pipeline Workshop – Case Study 1</title>
+  <link rel="stylesheet" href="../assets/source.css">
+</head>
+<body>
+  <header class="src-header">
+    <a href="../index.html" class="back-link">&#8592; Back to presentation</a>
+    <h1 class="src-title">Pipeline Workshop – Case Study 1</h1>
+  </header>
+  <main class="src-content"><p><a id="atelier-1-ingestion-dynamique-multi-sources-avec-validation"></a></p>
+<h1>Workshop 1: Multi-source dynamic ingestion with validation</h1>
+<p><a id="contexte-optimisation-dune-chaine-dapprovisionnement-en-energie-renouvelable"></a></p>
+<h2>Context: Optimizing a renewable energy supply chain</h2>
+<p>One <strong>usine de production traditionnelle</strong> decides to migrate to a solar-windian hybrid model. Energy data comes from multiple sensors and systems (current consumption, solar production, wind production, battery storage).</p>
+<p><a id="1-etat-des-lieux"></a></p>
+<h3>1. Status</h3>
+<ul>
+<li><strong>3 data sources</strong> quotidiennes :</li>
+<li><code>besoins_energetiques.csv</code> (consommation horaire de l'usine)</li>
+<li><code>production_solaire.csv</code> (return of panels per area)</li>
+<li><code>production_eolienne.csv</code> (turbine data)</li>
+<li><strong>Unstructured deposit</strong> : files placed manually in a folder</li>
+<li><strong>Absence de validation</strong> : impossible to know if all sources have arrived</li>
+<li><strong>Processus manuel</strong> : a technician checks and imports files in Excel</li>
+</ul>
+<p><a id="2-problematique"></a></p>
+<h3>2. Issue</h3>
+<p>How to automate the ingestion of heterogeneous energy data to analyse current needs and identify available renewable sources, without manual intervention and with validation of completeness?</p>
+<p>Contraintes :</p>
+<ul>
+<li>Dynamically detect which files are present</li>
+<li></li>
+<li>Create a Bronze table by energy source</li>
+<li></li>
+</ul>
+<p><a id="3-solution-pipeline-dingestion-intelligent"></a></p>
+<h3>3. Solution : Pipeline d'ingestion intelligent</h3>
+<p>Pipeline that scans, filters, copies and automatically tracks all energy sources to Bronze.</p>
+<p><a id="etapes"></a></p>
+<h2>Steps</h2>
+<p><a id="1-creer-le-workspace"></a></p>
+<h3>1. Create Workspace</h3>
+<ol>
+<li>Open <strong>Microsoft Fabric</strong> : <code>https://app.fabric.microsoft.com</code></li>
+<li>Left sidebar → click on <strong>Workspaces</strong></li>
+<li>Click <strong>+ New workspace</strong></li>
+<li>Remplissez :<br />
+   - <strong>Name</strong> : <code>WS_Energie_Renouvelable</code><br />
+   - <strong>Description</strong> : <code>Workspace for energy supply chain optimization</code><br />
+   - <strong>Advanced</strong> → <strong>License mode</strong> : select your license (Trial or Premium)</li>
+<li>Click <strong>Apply</strong></li>
+</ol>
+<p>💡 <strong>Astuce</strong> : Workspace is your main container, everything will be created in</p>
+<hr />
+<p><a id="2-creer-le-lakehouse-bronze"></a></p>
+<h3>2. Create the Bronze Lakehouse</h3>
+<ol>
+<li>In the workspace <strong>WS_Energie_Renouvelable</strong>, click <strong>+ New item</strong></li>
+<li>Select <strong>Lakehouse</strong></li>
+<li><strong>Name</strong> : <code>LH_Energie_Bronze</code></li>
+<li>Click <strong>Create</strong></li>
+</ol>
+<p>Wait for creation (15-30 seconds)</p>
+<hr />
+<p><a id="3-creer-le-dossier-landing-et-uploader-les-fichiers"></a></p>
+<h3>3. Create Landing folder and upload files</h3>
+<ol>
+<li>In <strong>LH_Energie_Bronze</strong>, section <strong>Explorer</strong> (gauche)</li>
+<li>Click <strong>Files</strong> → bouton <strong>...</strong> (3 points) → <strong>New subfolder</strong></li>
+<li><strong>Folder name</strong> : <code>landing</code></li>
+<li>Click <strong>Create</strong></li>
+<li>Click folder <strong>landing</strong> to open it</li>
+<li>Click <strong>Upload</strong> → <strong>Upload files</strong></li>
+<li>Select the 3 CSV files generated:<br />
+   - <code>besoins_energetiques.csv</code><br />
+   - <code>production_solaire.csv</code><br />
+   - <code>production_eolienne.csv</code></li>
+<li>Click <strong>Upload</strong></li>
+</ol>
+<p>Check that the 3 files appear in <code>Files/landing/</code></p>
+<hr />
+<p><a id="4-creer-le-pipeline"></a></p>
+<h3>4. Creating the pipeline</h3>
+<ol>
+<li>Click on the workspace name <strong>WS_Energie_Renouvelable</strong> (top left)</li>
+<li>Click <strong>+ New item</strong></li>
+<li>Search and select <strong>Data pipeline</strong></li>
+<li><strong>Name</strong> : <code>PL_Ingestion_Energie_Bronze</code></li>
+<li>Click <strong>Create</strong></li>
+</ol>
+<p>The pipeline canvas opens (white area with grid).</p>
+<hr />
+<p><a id="5-ajouter-lactivite-get-metadata"></a></p>
+<h2>5. Add Get Metadata activity</h2>
+<ol start="6">
+<li>
+<p>Panneau <strong>Activities</strong> (gauche) → section <strong>General</strong></p>
+</li>
+<li>
+<p>Glissez <strong>Get Metadata</strong> on the canvas</p>
+</li>
+<li>
+<p>Click on the activity to select it</p>
+</li>
+<li>
+<p>En bas, onglet <strong>General</strong> :</p>
+</li>
+</ol>
+<ul>
+<li><strong>Name</strong> : <code>ScanLanding</code></li>
+</ul>
+<ol start="10">
+<li>
+<p>Onglet <strong>Settings</strong> :</p>
+<ul>
+<li>Select connection my example <strong>(Lakehouse formateur4 (Preview)</strong></li>
+</ul>
+</li>
+<li>
+<ul>
+<li>
+<p><strong>Lakehouse</strong> : select <code>LH_Energie_Bronze</code></p>
+</li>
+<li>
+<p>Click <strong>Create</strong></p>
+</li>
+<li>
+<p><strong>Root folder</strong> : select <code>Files</code></p>
+</li>
+<li>
+<p>In <strong>File path</strong> you have two fields in the first you put <code>landing</code> Next to the second, there's an icon <strong>Browse</strong> click there and navigate to the file <code>besoins_energetiques.csv</code></p>
+</li>
+<li>
+<p>In property <strong>File format</strong> you choose <strong>Delimited Text</strong></p>
+</li>
+<li>
+<p>Observez que l'option <strong>Preview data</strong> becomes active click here to view data </p>
+</li>
+</ul>
+</li>
+<li>
+<p>Delete file name only leave folder name on <strong>Settings</strong> de <strong>ScanLanding</strong> :</p>
+<ul>
+<li><strong>Field list</strong> : click <strong>+ New</strong></li>
+<li>Cochez <strong>Child items</strong></li>
+<li>Click <strong>OK</strong></li>
+</ul>
+</li>
+</ol>
+<p>💡 <strong>Astuce</strong> : Get Metadata with Child items returns the list of all files in the folder </p>
+<hr />
+<p><a id="6-creer-les-variables-du-pipeline"></a></p>
+<h3>6. Create pipeline variables</h3>
+<ol>
+<li>At the bottom of the canvas, click on the tab <strong>Variables</strong></li>
+<li>Click <strong>+ New</strong> (3 times to create 3 variables)</li>
+</ol>
+<p><strong>Variable 1</strong> :</p>
+<ul>
+<li><strong>Name</strong> : <code>FichiersTraites</code></li>
+<li><strong>Type</strong> : <code>Array</code></li>
+<li><strong>Default value</strong> : laissez vide</li>
+</ul>
+<p><strong>Variable 2</strong> :</p>
+<ul>
+<li><strong>Name</strong> : <code>FichierActuel</code></li>
+<li><strong>Type</strong> : <code>String</code></li>
+<li><strong>Default value</strong> : laissez vide</li>
+</ul>
+<p><strong>Variable 3</strong> :</p>
+<ul>
+<li><strong>Name</strong> : <code>NombreFichiers</code></li>
+<li><strong>Type</strong> : <code>Integer</code></li>
+<li><strong>Default value</strong> : <code>0</code></li>
+</ul>
+<p><strong>Variable 4</strong> :</p>
+<ul>
+<li><strong>Name</strong> : <code>FichiersTemp</code></li>
+<li><strong>Type</strong> : <code>Array</code></li>
+<li><strong>Default value</strong> : laissez vide</li>
+</ul>
+<p>💡 <strong>Astuce</strong> : <code>FichiersTemp</code> serves as the intermediate buffer variable — Fabric forbids a variable to refer itself in <code>Set Variable</code>, so we accumulate first in <code>FichiersTemp</code> Then we copy to <code>FichiersTraites</code>.</p>
+<hr />
+<p><a id="7-ajouter-lactivite-foreach"></a></p>
+<h3>7. Add ForEach activity</h3>
+<ol>
+<li>
+<p><strong>Activities</strong> → <strong>Iteration &amp; Conditionals</strong></p>
+</li>
+<li>
+<p>Glissez <strong>ForEach</strong> on the canvas (to the right of ScanLanding)</p>
+</li>
+<li>
+<p>Reliez <strong>ScanLanding</strong> to <strong>ForEach</strong> :</p>
+</li>
+</ol>
+<ul>
+<li>Survolez <strong>ScanLanding</strong> → small green square appears</li>
+<li>Click and slide to <strong>ForEach</strong> (green arrow created)</li>
+</ul>
+<ol start="4">
+<li>
+<p>Click <strong>ForEach</strong></p>
+</li>
+<li>
+<p>Onglet <strong>General</strong> :</p>
+</li>
+</ol>
+<ul>
+<li><strong>Name</strong> : <code>BouclerFichiers</code></li>
+</ul>
+<ol start="6">
+<li>Onglet <strong>Settings</strong> :</li>
+</ol>
+<ul>
+<li><strong>Items</strong> : click in the field → <strong>Add dynamic content</strong></li>
+<li>Copy and paste this expression:</li>
+</ul>
+<p><code>@activity('ScanLanding').output.childItems</code></p>
+<ul>
+<li>Click <strong>OK</strong></li>
+</ul>
+<p>💡 <strong>Astuce</strong> : This expression recovers the array of files detected by Get Metadata</p>
+<hr />
+<p><a id="8-ajouter-lactivite-if-condition-dans-foreach"></a></p>
+<h3>8. Add If Condition activity (in ForEach)</h3>
+<ol>
+<li><strong>Double click</strong> on activity <strong>BouclerFichiers</strong></li>
+</ol>
+<ul>
+<li>A new canvas area opens (you are now "inside" the loop)</li>
+</ul>
+<ol start="2">
+<li>
+<p><strong>Activities</strong> → <strong>Iteration &amp; Conditionals</strong></p>
+</li>
+<li>
+<p>Glissez <strong>If Condition</strong> on this inner canvas</p>
+</li>
+<li>
+<p>Click <strong>If Condition</strong></p>
+</li>
+<li>
+<p>Onglet <strong>General</strong> :</p>
+</li>
+</ol>
+<ul>
+<li><strong>Name</strong> : <code>EstCSV</code></li>
+</ul>
+<ol start="6">
+<li>Onglet <strong>Activities</strong> :</li>
+</ol>
+<ul>
+<li><strong>Expression</strong> : click <strong>Add dynamic content</strong></li>
+<li>Copy and paste:</li>
+</ul>
+<p><code>@endswith(item().name, '.csv')</code></p>
+<p>💡 <strong>Astuce</strong> : <code>item()</code> represents the current ForEach loop element</p>
+<p>⚠️ <strong>Trap</strong> : It's <code>item()</code> sans <code>s</code>, pas <code>items()</code></p>
+<hr />
+<p><a id="9-configurer-la-branche-true-copy-data"></a></p>
+<h3>9. Configure True Branch - Copy Data</h3>
+<ol>
+<li>Activity <strong>EstCSV</strong>, click on the icon <strong>crayon</strong> in section <strong>True</strong><br />
+   - A new area opens (True branch)</li>
+<li>In <strong>Activities</strong> sous section <strong>Move &amp; Transform</strong></li>
+<li>Glissez <strong>Copy data</strong> on this canvas</li>
+<li>Click <strong>Copy data</strong></li>
+<li>Onglet <strong>General</strong> :<br />
+   - <strong>Name</strong> : <code>CopierVersBronze</code></li>
+</ol>
+<p><strong>Configuration Source</strong> :</p>
+<ol start="6">
+<li>Onglet <strong>Source</strong> :</li>
+</ol>
+<ul>
+<li>Selectionnez <strong>Connection</strong> and put the example connection <strong>(Lakehouse formateur4 (Preview)</strong></li>
+<li>In <strong>Lakehouse</strong> selectionnez <code>LH_Energie_Bronze</code> in the drop-down list</li>
+<li>For <strong>Root folder</strong> selectionnez <strong>Files</strong></li>
+<li>En <strong>File path type</strong> selectionnez <strong>File path</strong></li>
+<li>In <strong>Folder path</strong> : entrez <code>landing</code></li>
+<li>In <strong>File name</strong> : click <strong>Add dynamic content</strong> and enter:</li>
+</ul>
+<p><code>@item().name</code></p>
+<ul>
+<li>En <strong>File format</strong> choisissez <strong>DelimitedText</strong></li>
+</ul>
+<ol start="7">
+<li>Onglet <strong>Destination</strong>:</li>
+</ol>
+<ul>
+<li>
+<p>Select connection <strong>Lakehouse formateur4 (Preview) mon cas</strong> </p>
+</li>
+<li>
+<p>En <strong>Lakehouse</strong> selectionner <code>LH_Energie_Bronze</code> </p>
+</li>
+<li>
+<p>En <strong>Root folder</strong> selectionner <strong>Tables</strong></p>
+</li>
+<li>
+<p>In action table select <strong>Append</strong></p>
+</li>
+<li>
+<p>En <strong>Table</strong> focus a green line  <strong>Add dynamic content</strong> s'affiche mettez l'expression <code>@replace(item().name, '.csv', '')</code> in this field</p>
+</li>
+<li>
+<p>Leave the check box <strong>Enter manually</strong> checked</p>
+</li>
+</ul>
+<ol start="8">
+<li>
+<p>We leave the properties in the tabs <strong>Mapping</strong> and <strong>Settings</strong> tel qu'ils son</p>
+</li>
+<li>
+<p>Back to <strong>Source</strong> de <strong>CopierVersBronze</strong> :</p>
+</li>
+</ol>
+<ul>
+<li>Selectionner <strong>File path</strong>   </li>
+<li>Click on the icon <strong>Add dynamic content</strong> (petit rectangle)</li>
+<li>In <strong>File path - Folder</strong> : entrez <code>landing</code></li>
+<li>In <strong>File path - File</strong> : click <strong>Add dynamic content</strong></li>
+<li>Copy and paste:</li>
+</ul>
+<p><code>@item().name</code></p>
+<ol start="10">
+<li>Onglet <strong>Destination</strong>  :<br />
+- <strong>Connection</strong> : select your connection <code>LH_Energie_Bronze</code> existante<br />
+- <strong>Lakehouse</strong> : select <code>LH_Energie_Bronze</code><br />
+- <strong>Root folder</strong> : select <strong><code>Tables</code></strong> (pas Files)</li>
+<li><strong>Table</strong> :<ul>
+<li><strong>Cochez</strong> the box <strong><code>Enter manually</code></strong></li>
+<li>A text field appears</li>
+<li>Click the icon <strong>Add dynamic content</strong> (petit rectangle)</li>
+<li>Copy and paste:</li>
+</ul>
+</li>
+</ol>
+<pre><code>    @replace(item().name, '.csv', '')
+</code></pre>
+<pre><code>- Click **OK**
+</code></pre>
+<ol start="13">
+<li>
+<p><strong>Table of Action</strong> :</p>
+<ul>
+<li>Select <strong><code>Append</code></strong></li>
+</ul>
+</li>
+<li>
+<p><strong>Apply V-Order</strong> :</p>
+<p>Uncheck <strong>Not checked</strong> — deactivated)</p>
+</li>
+<li>
+<p>Onglets <strong>Mapping</strong> and <strong>Settings</strong> :</p>
+<p>Leave all default values</p>
+<ul>
+<li><strong>Mapping</strong> : Auto-detection enabled</li>
+<li><strong>Settings</strong> : <code>Auto</code> for all parameters</li>
+</ul>
+</li>
+</ol>
+<p>💡 <strong>Astuce</strong> : <code>replace()</code> Remove <code>.csv</code> to create <code>besoins_energetiques</code> for <code>besoins_energetiques.csv</code></p>
+<p>⚠️ <strong>Important</strong> : There is no more "Dataset" to create for the destination in the current interface. Everything is set up directly in the tab <strong>Destination</strong>.</p>
+<hr />
+<p><a id="10-ajouter-les-activites-de-tracabilite-dans-la-branche-true"></a></p>
+<h3>10. Add traceability activities (in the True branch)</h3>
+<p>Still in the branch <strong>True</strong>After <strong>CopierVersBronze</strong>, we must add <strong>two activities</strong> to trace processed files.</p>
+<p><a id="activite-1-tracerfichier-append-variable"></a></p>
+<h4>Activity 1: TracerFile (Append Variable)</h4>
+<ol>
+<li>
+<p><strong>Activities</strong> → <strong>General</strong> → glissez <strong>Append Variable</strong> on the canvas</p>
+</li>
+<li>
+<p>Reliez <strong>CopierVersBronze</strong> → <strong>TracerFichier</strong> (green arrow)</p>
+</li>
+<li>
+<p>Click <strong>Append Variable</strong></p>
+</li>
+<li>
+<p>Onglet <strong>General</strong> :</p>
+</li>
+</ol>
+<ul>
+<li><strong>Name</strong> : <code>TracerFichier</code></li>
+</ul>
+<ol start="5">
+<li>Onglet <strong>Settings</strong> :</li>
+</ol>
+<ul>
+<li><strong>Variable name</strong> : select <code>FichiersTemp</code></li>
+<li><strong>Value</strong> : click <strong>Add dynamic content</strong></li>
+<li>Copy and paste:</li>
+</ul>
+<p><code>@item().name</code></p>
+<ul>
+<li>Click <strong>OK</strong></li>
+</ul>
+<p>💡 <strong>Astuce</strong> : We accumulate in <code>FichiersTemp</code> because Fabric forbids a variable to refer itself — this is the intermediate buffer variable.</p>
+<hr />
+<p><a id="activite-2-recuperertracage-set-variable"></a></p>
+<h4>Activity 2: RecoveryTrace (Set Variable)</h4>
+<ol>
+<li>
+<p><strong>Activities</strong> → <strong>General</strong> → glissez <strong>Set Variable</strong> on the canvas</p>
+</li>
+<li>
+<p>Reliez <strong>TracerFichier</strong> → <strong>RecupererTracage</strong> (green arrow)</p>
+</li>
+<li>
+<p>Click <strong>Set Variable</strong></p>
+</li>
+<li>
+<p>Onglet <strong>General</strong> :</p>
+</li>
+</ol>
+<ul>
+<li><strong>Name</strong> : <code>RecupererTracage</code></li>
+</ul>
+<ol start="5">
+<li>Onglet <strong>Settings</strong> :</li>
+</ol>
+<ul>
+<li><strong>Variable name</strong> : select <code>FichiersTraites</code></li>
+<li><strong>Value</strong> : click <strong>Add dynamic content</strong></li>
+<li>Copy and paste:</li>
+</ul>
+<p><code>@variables('FichiersTemp')</code></p>
+<ul>
+<li>Click <strong>OK</strong></li>
+</ul>
+<p>💡 <strong>Astuce</strong> : <code>RecupererTracage</code> copy the current state of <code>FichiersTemp</code> in <code>FichiersTraites</code> every iteration. At the end of the loop, <code>FichiersTraites</code> contains the complete list of processed files.</p>
+<p>⚠️ <strong>Why two activities?</strong> Fabric interdit l'expression <code>@union(variables('FichiersTraites'), array(item().name))</code> in a <code>Set Variable</code> because the variable cannot refer itself (<em>self-referencing variable error</em>). The pattern <code>FichiersTemp</code> → <code>FichiersTraites</code> bypass this limitation.</p>
+<hr />
+<p><a id="12-retourner-au-canvas-principal"></a></p>
+<h3>12. Return to the main canvas</h3>
+<ol>
+<li>On the top left, click on the feed: <strong>PL_Ingestion_Energie_Bronze</strong><br />
+   - You return to the main canvas with your complete pipeline</li>
+</ol>
+<hr />
+<p><a id="13-configurer-foreach"></a></p>
+<h3>13. Configurer ForEach</h3>
+<p>The field <strong>Items</strong> of the <strong>ForEach</strong> is empty. There must be a dynamic expression.</p>
+<ol>
+<li>Click on the activity <strong>BouclerFichiers</strong> (ForEach)</li>
+<li>Onglet <strong>Settings</strong> en bas</li>
+<li>In the field <strong>Items</strong>, click <strong>Add dynamic content</strong></li>
+<li>Copy and paste this expression:</li>
+</ol>
+<pre><code>@activity('ScanLanding').output.childItems
+</code></pre>
+<ol start="5">
+<li>Click <strong>OK</strong></li>
+</ol>
+<p><a id="13-sauvegarder-le-pipeline"></a></p>
+<h3>13. Save pipeline</h3>
+<ol>
+<li>Click <strong>Save</strong> (disk icon at top)</li>
+<li>Wait for the confirmation.</li>
+</ol>
+<hr />
+<p><a id="14-deboguer-et-tester-le-pipeline"></a></p>
+<h3>14. Debug and test pipeline</h3>
+<ol>
+<li>Click <strong>Run</strong> top of page</li>
+<li>Wait for execution (15-45 seconds)</li>
+<li>Watch him <strong>Output</strong> :<br />
+   - <strong>ScanLanding</strong> : must display <code>Succeeded</code> with 3 items in childrenItems<br />
+   - <strong>BouclerFichiers</strong> : 3 visible iterations<br />
+   - <strong>EstCSV</strong> : 3× <code>Succeeded</code> (True branch)<br />
+   - <strong>CopierVersBronze</strong> : 3× <code>Succeeded</code><br />
+   - <strong>TracerFichier</strong> : 3× <code>Succeeded</code> (See FilesTemp)<br />
+   - <strong>RecupererTracage</strong> : 3× <code>Succeeded</code> (Copy in Traite Files)</li>
+</ol>
+<p>💡 <strong>Astuce</strong> : Click on each activity in Output to see details (JSON)</p>
+<p>⚠️ <strong>Trap</strong> : If an activity fails, click on it to see the detailed error</p>
+<hr />
+<p><a id="15-valider-les-tables-bronze-creees"></a></p>
+<h3>15. Validate Bronze tables created</h3>
+<ol>
+<li>Back to workspace <strong>WS_Energie_Renouvelable</strong></li>
+<li>Open <strong>LH_Energie_Bronze</strong></li>
+<li>Section <strong>Tables</strong> (gauche) :<br />
+   - ✅ <code>besoins_energetiques</code> → 168 lines<br />
+   - ✅ <code>production_solaire</code> → 175 lines<br />
+   - ✅ <code>production_eolienne</code> → 840 lines</li>
+<li>Click on a table to preview the data</li>
+</ol>
+<hr />
+<p><a id="resultat-attendu"></a></p>
+<h2>Expected result</h2>
+<pre><code> LH Energy Bronze/Tables/
+Energy requirements (168 lines - hourly consumption 1 week)
+- solar production (175 lines) - 25 panels × 7 days)
+840 lines - 5 turbines × 168 hours)
+</code></pre>
+<hr />
+<p><a id="section-analyse-interpretation-des-resultats-atelier-1"></a></p>
+<h1>Analysis Section: Interpretation of Results - Workshop 1</h1>
+<p><a id="rappel-de-la-problematique"></a></p>
+<h2>Background</h2>
+<p>A traditional production plant migrates to a solar-windian hybrid model. How to automate the ingestion of heterogeneous energy data to analyse current needs and identify available renewable sources, without manual intervention and with validation of completeness?</p>
+<hr />
+<p><a id="analyse-des-resultats-obtenus"></a></p>
+<h2>Analysis of the results obtained</h2>
+<p><a id="resultats-techniques"></a></p>
+<h3>Technical results</h3>
+<p>After pipeline operation <code>PL_Ingestion_Energie_Bronze</code>, check in <strong>LH_Energie_Bronze</strong> → <strong>Tables</strong> :</p>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Lines obtained</th>
+<th>Data type</th>
+<th>Period covered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>besoins_energetiques</code></td>
+<td>168</td>
+<td>Consommation horaire de l'usine</td>
+<td>1 semaine (7j × 24h)</td>
+</tr>
+<tr>
+<td><code>production_solaire</code></td>
+<td>175</td>
+<td>Performance of panels by area</td>
+<td>7 jours × 25 panneaux</td>
+</tr>
+<tr>
+<td><code>production_eolienne</code></td>
+<td>840</td>
+<td>Turbines data</td>
+<td>168 heures × 5 turbines</td>
+</tr>
+</tbody>
+</table>
+<h3></h3>
+<p><a id="questions-danalyse-guidee"></a></p>
+<h2>Guided Analysis Questions</h2>
+<p><a id="question-1-validation-de-la-completude-des-sources"></a></p>
+<h3>Question 1: Validation of the completeness of sources</h3>
+<p><strong>Check the variable <code>FichiersTraites</code></strong> in the Output panel, by clicking on the icon <strong>Input</strong> of activity <code>RecupererTracage</code> every iteration. You'll see:</p>
+<pre><code class="language-json">{ &quot;variableName&quot;: &quot;FichiersTraites&quot;, &quot;value&quot;: [&quot;besoins_energetiques.csv&quot;] }
+{ &quot;variableName&quot;: &quot;FichiersTraites&quot;, &quot;value&quot;: [&quot;besoins_energetiques.csv&quot;, &quot;production_solaire.csv&quot;] }
+{ &quot;variableName&quot;: &quot;FichiersTraites&quot;, &quot;value&quot;: [&quot;besoins_energetiques.csv&quot;, &quot;production_solaire.csv&quot;, &quot;production_eolienne.csv&quot;] }
+</code></pre>
+<p>Variable <code>FichiersTemp</code> accumule via <code>Append Variable</code>then <code>RecupererTracage</code> copy the state in <code>FichiersTraites</code>. The final result:</p>
+<pre><code class="language-json">[&quot;besoins_energetiques.csv&quot;, &quot;production_solaire.csv&quot;, &quot;production_eolienne.csv&quot;]
+</code></pre>
+<blockquote>
+<p>⚠️ <strong>Note</strong> : L'Output de <code>TracerFichier</code> and <code>RecupererTracage</code> affiche <code>{}</code> — this is normal for these types of activities. Always check it<strong>Input</strong> to see the real values.</p>
+</blockquote>
+<p><strong>Interpretation</strong> :</p>
+<ul>
+<li>
+<p>The <strong>3 data sources</strong> are present and have been ingested</p>
+</li>
+<li>
+<p>No missing source → Energy analysis can be conducted</p>
+</li>
+<li>
+<p>System automatically detects files present</p>
+</li>
+</ul>
+<p><strong>Business impact</strong> : If a file is missing tomorrow (e.g. production solar.csv), the variable <code>NombreFichiers</code> would be = 2 instead of 3, which would trigger an alert.</p>
+<hr />
+<p><a id="question-2-granularite-temporelle-des-besoins-energetiques"></a></p>
+<h3>Question 2: Temporal granularity of energy needs</h3>
+<p><strong>Analyze table <code>besoins_energetiques</code></strong> :</p>
+<pre><code class="language-sql">SELECT CUNT(*) as NbRelevants FROM energy needs
+-- Result: 168 lines
+</code></pre>
+<p><strong>Calculate the measurement frequency</strong> :</p>
+<pre><code>168 7-day surveys = 168 / 7 = 24 surveys/day
+24 readings/day = 1 reading/hour
+</code></pre>
+<p><strong>Interpretation</strong> :</p>
+<ul>
+<li>
+<p><strong>Hourly Granularity</strong> : Consumption is measured every hour</p>
+</li>
+<li>
+<p><strong>Period</strong> : 7 jours complets (1 semaine type)</p>
+</li>
+<li>
+<p><strong>Accuracy</strong> : Sufficient to identify peak consumption</p>
+</li>
+</ul>
+<p><strong>Business impact</strong> : Allows to analyze consumption patterns (day/night, weekday/weekend) and adjust production accordingly.</p>
+<p><strong>Example of further analysis</strong> :</p>
+<pre><code class="language-sql">SELECT 
+    DATEPART(hour, Horodatage) as Heure,
+    AVG(Consommation_kWh) as Conso_Moyenne
+FROM besoins_energetiques
+GROUP BY DATEPART(hour, Horodatage)
+ORDER BY Heure
+</code></pre>
+<p><strong>Insight expected</strong> : Identify peak hours (ex: 8am-6pm for a factory)</p>
+<hr />
+<p><a id="question-3-couverture-photovoltaique"></a></p>
+<h3>Question 3: Photovoltaic coverage</h3>
+<p><strong>Analyze table <code>production_solaire</code></strong> :</p>
+<pre><code class="language-sql">SELECT CUNT(*) as NbReleves FROM production solar
+-- Result: 175 lines
+</code></pre>
+<p><strong>Calculate the number of panels</strong> :</p>
+<pre><code>175 surveys / 7 days = 25 solar panels
+</code></pre>
+<p><strong>Check geographical distribution</strong> :</p>
+<pre><code class="language-sql">SELECT ZoneInstallation, COUNT(*) as NbPanneaux
+FROM production_solaire
+GROUP BY ZoneInstallation
+ORDER BY NbPanneaux DESC
+</code></pre>
+<p><strong>Expected result</strong> :</p>
+<table>
+<thead>
+<tr>
+<th>Zone</th>
+<th>Nb Panneaux</th>
+<th>% of total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Toit Nord</td>
+<td>7</td>
+<td>28%</td>
+</tr>
+<tr>
+<td>Toit Sud</td>
+<td>7</td>
+<td>28%</td>
+</tr>
+<tr>
+<td>Parking</td>
+<td>6</td>
+<td>24%</td>
+</tr>
+<tr>
+<td>East facade</td>
+<td>5</td>
+<td>20%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Interpretation</strong> :</p>
+<ul>
+<li>
+<p><strong>25 panneaux</strong> in 4 areas</p>
+</li>
+<li>
+<p><strong>Balanced coverage</strong> : Roofs (56%), Parking (24%), Façade (20%)</p>
+</li>
+<li>
+<p><strong>Geographical redundancy</strong> : If one area is shaded, the others compensate</p>
+</li>
+</ul>
+<p><strong>Business impact</strong> : Diversification of locations to maximize production throughout the day (East morning, South noon, West afternoon).</p>
+<hr />
+<p><a id="question-4-capacite-eolienne-et-frequence-de-mesure"></a></p>
+<h3>Question 4: Wind capacity and measurement frequency</h3>
+<p><strong>Analyze table <code>production_eolienne</code></strong> :</p>
+<pre><code class="language-sql">SELECT CUNT(*) as NbReleves FROM production eolian
+-- Result: 840 lines
+</code></pre>
+<p><strong>Calculate the number of turbines and frequency</strong> :</p>
+<pre><code>840 readings / 168 hours (7j × 24h) = 5 turbines
+5 readings per hour = 1 reading every 12 minutes per turbine
+</code></pre>
+<p><strong>Interpretation</strong> :</p>
+<ul>
+<li>
+<p><strong>5 wind turbines</strong> en production</p>
+</li>
+<li>
+<p><strong>High frequency</strong> : 1 measures every 12 minutes</p>
+</li>
+<li>
+<p><strong>Fine Granularity</strong> : To detect rapid wind variations</p>
+</li>
+</ul>
+<p><strong>Business impact</strong> : The high frequency makes it possible to adjust the consumption in near real time according to the wind production (e.g. to launch energy-efficient machines when the wind blows strong).</p>
+<p><strong>Check distribution</strong> :</p>
+<pre><code class="language-sql">SELECT TurbineID, COUNT(*) as NbReleves
+FROM production_eolienne
+GROUP BY TurbineID
+ORDER BY TurbineID
+</code></pre>
+<p><strong>Expected result</strong> :</p>
+<table>
+<thead>
+<tr>
+<th>Turbine</th>
+<th>Nb Records</th>
+<th>% of total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EOL-01</td>
+<td>168</td>
+<td>20%</td>
+</tr>
+<tr>
+<td>EOL-02</td>
+<td>168</td>
+<td>20%</td>
+</tr>
+<tr>
+<td>EOL-03</td>
+<td>168</td>
+<td>20%</td>
+</tr>
+<tr>
+<td>EOL-04</td>
+<td>168</td>
+<td>20%</td>
+</tr>
+<tr>
+<td>EOL-05</td>
+<td>168</td>
+<td>20%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Interpretation</strong> : Distribution <strong>perfectly balanced</strong> → All turbines are operational.</p>
+<hr />
+<p><a id="question-5-comparaison-des-volumes-de-donnees-par-source"></a></p>
+<h3>Question 5: Comparison of data volumes by source</h3>
+<p><strong>Summary of volumes</strong> :</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Lines</th>
+<th>Equipment</th>
+<th>Frequency</th>
+<th>Volume relatif</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Besoins</td>
+<td>168</td>
+<td>1 usine</td>
+<td>1/heure</td>
+<td>16%</td>
+</tr>
+<tr>
+<td>Solaire</td>
+<td>175</td>
+<td>25 panneaux</td>
+<td>1/jour</td>
+<td>17%</td>
+</tr>
+<tr>
+<td>Wind</td>
+<td>840</td>
+<td>5 turbines</td>
+<td>5/heure</td>
+<td>67%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Interpretation</strong> :</p>
+<ul>
+<li>
+<p><strong>Wind energy accounts for 67%</strong> of ingested data</p>
+</li>
+<li>
+<p>Reason: High frequency (5 readings/h) + 5 equipment</p>
+</li>
+<li>
+<p><strong>Unbalanced volumes</strong> but normal (different sensors)</p>
+</li>
+</ul>
+<p><strong>Business impact</strong> :</p>
+<ul>
+<li>
+<p>Storage costs will be mainly related to wind data</p>
+</li>
+<li>
+<p>Real-time processing will need to prioritize wind flows</p>
+</li>
+<li>
+<p>Solar can be aggregated daily without loss of information</p>
+</li>
+</ul>
+<hr />
+<p><a id="synthese-reponse-a-la-problematique"></a></p>
+<h2>Summary: Response to the problem</h2>
+<p><a id="problematique-rappelee"></a></p>
+<h3>Issue recalled</h3>
+<blockquote>
+<p>How to automate the ingestion of heterogeneous energy data to analyse current needs and identify available renewable sources, without manual intervention and with validation of completeness?</p>
+</blockquote>
+<p><a id="tableau-de-satisfaction-des-objectifs"></a></p>
+<h3>Target satisfaction table</h3>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Method</th>
+<th>Result</th>
+<th>Business impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>1. Automatisation</strong></td>
+<td>Dynamic Pipeline with Get Metadata</td>
+<td>✅ 0 intervention manuelle</td>
+<td>Savings of 2 hours/day of technical work</td>
+</tr>
+<tr>
+<td><strong>2. Dynamic detection</strong></td>
+<td>Child items on file landing</td>
+<td>3 files detected automatically</td>
+<td>Works for 3, 10 or 100 files</td>
+</tr>
+<tr>
+<td><strong>3. Filtrage intelligent</strong></td>
+<td>If Condition on <code>.csv</code></td>
+<td>Only CSV treated</td>
+<td>Ignore logs, pictures, temporary files</td>
+</tr>
+<tr>
+<td><strong>4. Creation tables Bronze</strong></td>
+<td>Copy Data with dynamic name</td>
+<td>3 tables created (1183 total lines)</td>
+<td>Structured and Requestable Data</td>
+</tr>
+<tr>
+<td><strong>5. Complete validation</strong></td>
+<td>Variable <code>FichiersTraites</code></td>
+<td>100% completeness (3/3)</td>
+<td>Alerte automatique si source manquante</td>
+</tr>
+<tr>
+<td><strong>6. Traceability</strong></td>
+<td>AppendVariable (FichiersTemp) + SetVariable (FichiersTraites)</td>
+<td>The history of ingested files</td>
+<td>Audit and Compliance GDPR</td>
+</tr>
+</tbody>
+</table>
+<p><a id="insights-metier"></a></p>
+<h2>Business Insights</h2>
+<p><a id="insight-1-equilibre-energetique-preliminaire"></a></p>
+<h3>Insight 1: Preliminary energy balance</h3>
+<p><strong>Calculate theoretical renewable capacity</strong> :</p>
+<pre><code class="language-sql">-- Average solar output
+SELECT AVG(Production kWh) as Prod Solar Medium
+From solar production
+-- Expected result: ~350 kWh/day (25 panels × 14 kWh)
+
+-- Average wind production
+SELECT AVG(Production kWh) as Prod Eolienne Moyenne
+FROM production eolian
+-- Expected result: ~1200 kWh/day (5 turbines × 240 kWh)
+
+-- Daily energy requirement
+SELECT SUM(Consumption kWh) / 7 as Conso Quotidienne
+From energy needs
+-- Expected result: ~1800 kWh/day
+</code></pre>
+<p><strong>Analyse de couverture</strong> :</p>
+<pre><code>Renewable production: 350 (solar) + 1200 (wind) = 1550 kWh/day
+Energy requirement: 1800 kWh/day
+Coverage rate: (1550 / 1800) × 100 = 86%
+Deficit: 1800 - 1550 = 250 kWh/day (14%)
+</code></pre>
+<p><strong>Interpretation</strong> :</p>
+<ul>
+<li><strong>86% energy autonomy</strong> with renewable sources</li>
+<li><strong>14% deficit</strong> to be filled (traditional network or batteries)</li>
+<li><strong>Achieved</strong> : Significant reduction in network dependence</li>
+</ul>
+<p>💡 <strong>Trade recommendations</strong> :</p>
+<ol>
+<li>Add <strong>5 panneaux solaires</strong> additional (+70 kWh/d) to reach 90% autonomy</li>
+<li>Install a <strong>battery system</strong> 250 kWh to store surplus and cover peaks</li>
+<li>Implement a <strong>intelligent discharge system</strong> to carry forward certain non-priority expenses</li>
+</ol>
+<hr />
+<p><a id="insight-2-patterns-temporels-de-consommation"></a></p>
+<h3>Insight 2 : Patterns temporels de consommation</h3>
+<p><strong>Identify peak hours</strong> :</p>
+<pre><code class="language-sql">SELECT 
+    DATEPART(hour, Horodatage) as Heure,
+    AVG(Consommation_kWh) as Conso_Moyenne,
+    MAX(Consommation_kWh) as Conso_Max
+FROM besoins_energetiques
+GROUP BY DATEPART(hour, Horodatage)
+ORDER BY Conso_Moyenne DESC
+</code></pre>
+<p><strong>Expected result (peak hours)</strong> :</p>
+<table>
+<thead>
+<tr>
+<th>Heure</th>
+<th>Conso Moyenne</th>
+<th>Conso Max</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>14h</td>
+<td>95 kWh</td>
+<td>110 kWh</td>
+</tr>
+<tr>
+<td>15h</td>
+<td>92 kWh</td>
+<td>105 kWh</td>
+</tr>
+<tr>
+<td>10h</td>
+<td>88 kWh</td>
+<td>100 kWh</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Interpretation</strong> :</p>
+<ul>
+<li>
+<p><strong>Pic de consommation</strong> : 14h-15h (heures de production maximale de l'usine)</p>
+</li>
+<li>
+<p><strong>Coincidence</strong> : Maximum solar production also during this period</p>
+</li>
+<li>
+<p><strong>Opportunity</strong> : Synchronisation naturelle production solaire / consommation</p>
+</li>
+</ul>
+<p><strong>Trade recommendations</strong> :</p>
+<ul>
+<li>
+<p><strong>Optimiser</strong> : Launch the energy-generating processes between 12pm and 4pm (maximum solar)</p>
+</li>
+<li>
+<p><strong>Different</strong> : Recharge batteries and preheat equipment early morning (night wind)</p>
+</li>
+<li>
+<p><strong>Avoid</strong> : Do not launch large consumers between 6 p.m. and 10 p.m.</p>
+</li>
+</ul>
+<hr />
+<p><a id="insight-3-variabilite-de-la-production-eolienne"></a></p>
+<h3>Insight 3: Variable wind production</h3>
+<p><strong>Analyze stability</strong> :</p>
+<pre><code class="language-sql">SELECT 
+    TurbineID,
+    AVG(Production_kWh) as Prod_Moyenne,
+    STDEV(Production_kWh) as Ecart_Type,
+    MIN(Production_kWh) as Prod_Min,
+    MAX(Production_kWh) as Prod_Max
+FROM production_eolienne
+GROUP BY TurbineID
+</code></pre>
+<p><strong>Expected result</strong> :</p>
+<table>
+<thead>
+<tr>
+<th>Turbine</th>
+<th>Moyenne</th>
+<th>Standard deviation</th>
+<th>Min</th>
+<th>Max</th>
+<th>Coefficient variation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EOL-01</td>
+<td>10 kWh</td>
+<td>4.2 kWh</td>
+<td>0</td>
+<td>18</td>
+<td>42%</td>
+</tr>
+<tr>
+<td>EOL-02</td>
+<td>10 kWh</td>
+<td>4.5 kWh</td>
+<td>0</td>
+<td>19</td>
+<td>45%</td>
+</tr>
+<tr>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Interpretation</strong> :</p>
+<ul>
+<li>
+<p><strong>High variability</strong> : Coefficient de variation ~40-45%</p>
+</li>
+<li>
+<p><strong>Unpredictability</strong> : Fluctuous production from 0 to 18-19 kWh</p>
+</li>
+<li>
+<p><strong>Besoin de stockage</strong> : Batteries are essential to smooth production</p>
+</li>
+</ul>
+<p><strong>Trade recommendations</strong> :</p>
+<ul>
+<li>
+<p><strong>Court terme</strong> : 500 kWh battery system (covers 6 hours of deficit)</p>
+</li>
+<li>
+<p><strong>Moyen terme</strong> : Backup contract with the traditional network</p>
+</li>
+<li>
+<p><strong>Long terme</strong> : Diversify with a 2nd predictable source (hydroelectric if possible)</p>
+</li>
+</ul>
+<p><a id="conclusion-valeur-ajoutee-du-pipeline"></a></p>
+<h2>Conclusion: Value added of the pipeline</h2>
+<p><a id="situation-avant-processus-manuel"></a></p>
+<h3>Situation BEFORE (manual process)</h3>
+<table>
+<thead>
+<tr>
+<th>Criteria</th>
+<th>State</th>
+<th>Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Temps d'ingestion</strong></td>
+<td>2h/jour</td>
+<td>Cost: €400/month (technical salary)</td>
+</tr>
+<tr>
+<td><strong>Erreurs humaines</strong></td>
+<td>1-2/semaine</td>
+<td>False analyses, erroneous decisions</td>
+</tr>
+<tr>
+<td><strong>Complete validation</strong></td>
+<td>Manuelle</td>
+<td>Forget file risk: 10%</td>
+</tr>
+<tr>
+<td><strong>Traceability</strong></td>
+<td>Excel file</td>
+<td>Pas d'audit fiable</td>
+</tr>
+<tr>
+<td><strong>Reactivity</strong></td>
+<td>J+1</td>
+<td>Decisions taken on previous day's data</td>
+</tr>
+</tbody>
+</table>
+<p><a id="situation-apres-pipeline-automatise"></a></p>
+<h3>AFTER (automated pipeline)</h3>
+<table>
+<thead>
+<tr>
+<th>Criteria</th>
+<th>State</th>
+<th>Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Temps d'ingestion</strong></td>
+<td>15-45 sec</td>
+<td>Cost: €0/month (automated)</td>
+</tr>
+<tr>
+<td><strong>Erreurs humaines</strong></td>
+<td>0</td>
+<td>100% reliable data</td>
+</tr>
+<tr>
+<td><strong>Complete validation</strong></td>
+<td>Automatique</td>
+<td>Immediate alert if missing file</td>
+</tr>
+<tr>
+<td><strong>Traceability</strong></td>
+<td>Variable Array</td>
+<td>Full and historical audit</td>
+</tr>
+<tr>
+<td><strong>Reactivity</strong></td>
+<td>Real time</td>
+<td>Decisions taken on current data</td>
+</tr>
+</tbody>
+</table>
+<p><a id="gains-quantifies"></a></p>
+<h3>Quantified gains</h3>
+<table>
+<thead>
+<tr>
+<th>Indicateur</th>
+<th>Before</th>
+<th>After</th>
+<th>Gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Treatment time</strong></td>
+<td>2h/jour</td>
+<td>45 sec/jour</td>
+<td><strong>99.6%</strong></td>
+</tr>
+<tr>
+<td><strong>Monthly cost</strong></td>
+<td>400€</td>
+<td>5€ (compute)</td>
+<td><strong>98.75%</strong></td>
+</tr>
+<tr>
+<td><strong>Error rate</strong></td>
+<td>10%</td>
+<td>0%</td>
+<td><strong>100%</strong></td>
+</tr>
+<tr>
+<td><strong>Deadline for decision</strong></td>
+<td>24h</td>
+<td>1h</td>
+<td><strong>95.8%</strong></td>
+</tr>
+</tbody>
+</table>
+<p><a id="roi-return-on-investment"></a></p>
+<h3>ROI (Return on Investment)</h3>
+<p><strong>Investissement initial</strong> :</p>
+<ul>
+<li>Pipeline development : 4h × 80€/h = 320€</li>
+<li>Formation : 2h × 80€/h = 160€</li>
+<li><strong>Total</strong> : 480€</li>
+</ul>
+<p><strong>Monthly savings</strong> :</p>
+<ul>
+<li>Temps technicien : 400€/mois</li>
+<li>Error reduction: ~50€/month (average error cost)</li>
+<li><strong>Total</strong> : 450€/mois</li>
+</ul>
+<p><strong>Return on investment</strong> :</p>
+<pre><code>ROI = (480€) / (450€/mois) = 1.07 mois
+</code></pre></main>
+</body>
+</html>

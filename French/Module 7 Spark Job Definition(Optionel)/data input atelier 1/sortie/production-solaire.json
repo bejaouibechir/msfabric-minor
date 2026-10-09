@@ -1,0 +1,242 @@
+[
+  {
+    "PanneauID": "SOL_001",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 38.5,
+    "Ensoleillement_Heures": 8.5,
+    "Rendement_Pct": 20.3
+  },
+  {
+    "PanneauID": "SOL_002",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 22.3,
+    "Ensoleillement_Heures": 6.2,
+    "Rendement_Pct": 17.8
+  },
+  {
+    "PanneauID": "SOL_003",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Parking",
+    "Production_kWh": 31.7,
+    "Ensoleillement_Heures": 7.8,
+    "Rendement_Pct": 19.5
+  },
+  {
+    "PanneauID": "SOL_004",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 42.1,
+    "Ensoleillement_Heures": 9.2,
+    "Rendement_Pct": 21.4
+  },
+  {
+    "PanneauID": "SOL_005",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 18.9,
+    "Ensoleillement_Heures": 5.5,
+    "Rendement_Pct": 16.2
+  },
+  {
+    "PanneauID": "SOL_006",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Parking",
+    "Production_kWh": 28.4,
+    "Ensoleillement_Heures": 7.1,
+    "Rendement_Pct": 18.7
+  },
+  {
+    "PanneauID": "SOL_007",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 39.8,
+    "Ensoleillement_Heures": 8.8,
+    "Rendement_Pct": 20.9
+  },
+  {
+    "PanneauID": "SOL_008",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 24.6,
+    "Ensoleillement_Heures": 6.7,
+    "Rendement_Pct": 18.1
+  },
+  {
+    "PanneauID": "SOL_009",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Parking",
+    "Production_kWh": 33.2,
+    "Ensoleillement_Heures": 7.9,
+    "Rendement_Pct": 19.8
+  },
+  {
+    "PanneauID": "SOL_010",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 41.3,
+    "Ensoleillement_Heures": 9.0,
+    "Rendement_Pct": 21.1
+  },
+  {
+    "PanneauID": "SOL_011",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 20.5,
+    "Ensoleillement_Heures": 6.0,
+    "Rendement_Pct": 17.3
+  },
+  {
+    "PanneauID": "SOL_012",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Parking",
+    "Production_kWh": 29.7,
+    "Ensoleillement_Heures": 7.4,
+    "Rendement_Pct": 19.0
+  },
+  {
+    "PanneauID": "SOL_013",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 37.9,
+    "Ensoleillement_Heures": 8.4,
+    "Rendement_Pct": 20.5
+  },
+  {
+    "PanneauID": "SOL_014",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 23.1,
+    "Ensoleillement_Heures": 6.5,
+    "Rendement_Pct": 17.9
+  },
+  {
+    "PanneauID": "SOL_015",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Parking",
+    "Production_kWh": 32.5,
+    "Ensoleillement_Heures": 7.7,
+    "Rendement_Pct": 19.6
+  },
+  {
+    "PanneauID": "SOL_016",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 40.6,
+    "Ensoleillement_Heures": 8.9,
+    "Rendement_Pct": 21.0
+  },
+  {
+    "PanneauID": "SOL_017",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 21.8,
+    "Ensoleillement_Heures": 6.3,
+    "Rendement_Pct": 17.6
+  },
+  {
+    "PanneauID": "SOL_018",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Parking",
+    "Production_kWh": 30.4,
+    "Ensoleillement_Heures": 7.5,
+    "Rendement_Pct": 19.2
+  },
+  {
+    "PanneauID": "SOL_019",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 38.2,
+    "Ensoleillement_Heures": 8.6,
+    "Rendement_Pct": 20.4
+  },
+  {
+    "PanneauID": "SOL_020",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 19.7,
+    "Ensoleillement_Heures": 5.8,
+    "Rendement_Pct": 16.9
+  },
+  {
+    "PanneauID": "SOL_021",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Parking",
+    "Production_kWh": 27.9,
+    "Ensoleillement_Heures": 7.2,
+    "Rendement_Pct": 18.8
+  },
+  {
+    "PanneauID": "SOL_022",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 43.4,
+    "Ensoleillement_Heures": 9.4,
+    "Rendement_Pct": 21.6
+  },
+  {
+    "PanneauID": "SOL_023",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 25.3,
+    "Ensoleillement_Heures": 6.9,
+    "Rendement_Pct": 18.3
+  },
+  {
+    "PanneauID": "SOL_024",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Parking",
+    "Production_kWh": 34.1,
+    "Ensoleillement_Heures": 8.1,
+    "Rendement_Pct": 19.9
+  },
+  {
+    "PanneauID": "SOL_025",
+    "Date": "2025-01-01",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 36.8,
+    "Ensoleillement_Heures": 8.2,
+    "Rendement_Pct": 20.1
+  },
+  {
+    "PanneauID": "SOL_001",
+    "Date": "2025-01-02",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 35.2,
+    "Ensoleillement_Heures": 8.0,
+    "Rendement_Pct": 19.8
+  },
+  {
+    "PanneauID": "SOL_002",
+    "Date": "2025-01-02",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 20.1,
+    "Ensoleillement_Heures": 5.9,
+    "Rendement_Pct": 17.1
+  },
+  {
+    "PanneauID": "SOL_003",
+    "Date": "2025-01-02",
+    "Zone_Installation": "Parking",
+    "Production_kWh": 29.3,
+    "Ensoleillement_Heures": 7.3,
+    "Rendement_Pct": 18.9
+  },
+  {
+    "PanneauID": "SOL_004",
+    "Date": "2025-01-02",
+    "Zone_Installation": "Toit_Sud",
+    "Production_kWh": 39.7,
+    "Ensoleillement_Heures": 8.7,
+    "Rendement_Pct": 20.7
+  },
+  {
+    "PanneauID": "SOL_005",
+    "Date": "2025-01-02",
+    "Zone_Installation": "Toit_Nord",
+    "Production_kWh": 17.4,
+    "Ensoleillement_Heures": 5.2,
+    "Rendement_Pct": 15.9
+  }
+]

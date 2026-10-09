@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingestion Unstructured – Part 2</title>
+  <link rel="stylesheet" href="../assets/source.css">
+</head>
+<body>
+  <header class="src-header">
+    <a href="../index.html" class="back-link">&#8592; Back to presentation</a>
+    <h1 class="src-title">Ingestion Unstructured – Part 2</h1>
+  </header>
+  <main class="src-content"><p><a id="atelier-5-traitement-des-donnees-non-structurees"></a></p>
+<h1>Workshop 5 — Unstructured Data Processing</h1>
+<p><a id="partie-2-pipeline-automatise-alertes-sur-appels-critiques"></a></p>
+<h4>Part 2: Automated Pipeline + Critical Call Alerts</h4>
+<p><a id="theme-orchestration-data-factory-activator-real-time-intelligence"></a></p>
+<h4>Theme: Data Factory Orchestration + Activator (Real-Time Intelligence)</h4>
+<hr />
+<p><a id="rappel-et-contexte"></a></p>
+<h2>Background and Context</h2>
+<p>Part 1 created the <code>silver_appels_enrichis</code> table with 120 manually analyzed calls.</p>
+<p>Problem: <strong>this treatment should automatically trigger</strong> with each new incoming audio file. An operator cannot manually restart the Notebook every day.</p>
+<p><strong>Part 2:</strong> Build a Pipeline Data Factory that:</p>
+<ol>
+<li>Starts on arrival of a new file in the <code>audio_calls/</code></li>
+<li>folder Process file (update of Silver table)</li>
+<li>Record an alert in the <code>alertes_critiques</code> table if the churn score ≥ 50 (visible in Fabric Monitor and Power BI)</li>
+</ol>
+<p><strong>Architecture of this part — 100% native Fabric</strong></p>
+<pre><code>New .txt file in Files/audio calls/
+▼
+Pipeline Data Factory (scheduled trigger every 15 minutes)
+Activity 1: Parametric Notebook (enrichment + MERGE Silver)
+Activity 2: If Condition (score risk churn ≥ 50 ?)
+│ ¬ YES → Set Variable & quot; ALERT&quot; (visible Monitor) + writing table alerts critic
+│ - NO → Set Variable &quot;OK&quot; (visible Monitor)
+▼
+Delta table critical alerts (consultable SQL + Power BI Part 3)
+</code></pre>
+<blockquote>
+<p>💡 <strong>Pedagogical choice:</strong> All alerts are traced to a Delta <code>alertes_critiques</code> table in Lakehouse. This approach is free, persistent, SQL-requestable, and directly usable in Part 3's Power BI report — without any external subscription.</p>
+</blockquote>
+<hr />
+<p><a id="partie-2"></a></p>
+<h1>PART 2</h1>
+<hr />
+<p><a id="bloc-1-notebook-parametre-traitement-dun-fichier-unique"></a></p>
+<h2>Block 1 — Set Notebook (processing a single file)</h2>
+<blockquote>
+<p>Part 1 processed the 120 files in batch. Here we process <strong>one file at a time</strong> dynamically, via a parameter passed through the Pipeline.</p>
+</blockquote>
+<p><a id="11-creer-le-notebook-parametre"></a></p>
+<h3>1.1 — Create the parameterised Notebook</h3>
+<ol>
+<li>Workspace → <strong>+ New item</strong> → <strong>Notebook</strong></li>
+<li>Nommer : <code>NB_Incremental_Processing</code></li>
+<li>Add <code>LH_SolarVoix</code></li>
+</ol>
+<p><a id="12-cellule-1-declaration-du-parametre"></a></p>
+<h3>1.2 — Cell 1: Declaration of the parameter</h3>
+<p>Add this cell at the beginning of the Notebook to install <code>sentencepiece</code></p>
+<pre><code>%pip install transformers torch sentencepiece --quiet
+</code></pre>
+<pre><code class="language-python">&lt;a id=&quot;cell-1-parametre-dentre&quot;&gt&lt;/a&gt;
+#=== CELL 1: Input parameter ===
+#
+&lt;a id=&quot;objective-declare-variable-calfilepath-as-parameter-of-notebook&gt;&lt;/a&gt;
+# OBJECTIVE: Declare the call file path variable as the Notebook parameter.
+&lt;a id=&quot;when-the-pipeline-data-factory-called-this-notebook-it-injected&gt;&lt;/a&gt;
+# When Pipeline Data Factory calls this Notebook, it injects
+&lt;a id=&quot;the-real-value-of-file-path-via-this-paramet;&gt;&lt;/a&gt;
+# the actual value of the file path via this parameter.
+#
+&lt;a id=&quot;important-this-cell-must-mark-as-parameters-cell-in-manufactured&lt;/a&gt;
+# IMPORTANT: This cell MUST be marked as Parameters cell quot; In Fabric.
+&lt;a id=&quot;how-to&gt;&lt;/a&gt;
+# How to:
+&lt;a id=&quot;1-click-on-the-right-of-the-cell&gt;&lt;/a&gt;
+# 1. Click on &quot;...to the right of the cell
+&lt;a id=&quot;2-select-toggle-parameter-cellquot;&gt;/a&gt;
+#2. Select &quot;Toggle parameter cellquot;
+&lt;a id=&quot;3-un-bandeau-bleu-parameters-appeared-in-the-cell&gt;&lt;/a&gt;
+#3. A blue stripe appears at the bottom of the cell
+#
+&lt;a id=&quot;callfilepath-path-path-relative-of-file-ex-filesaudiocallscall0121txt&quot;&gt;&lt;/a&gt;
+# call file path: relative path of file, ex: &quot;Files/audio calls/CALL 0121.txt&quot;
+&lt;a id=&quot;-value-by-default-allow-to-test-manual-the-notebook-without-pipeline&lt;&gt;/a&gt;
+# The default value allows you to manually test the Notebook without Pipeline.
+
+call file path = &quot;Files/audio calls/CALL 0001.txt&quot; # default value for test
+
+print(e&quot;Parameter received: call file path = {call file path}&quot;)
+</code></pre>
+<blockquote>
+<p>⚠️ <strong>Current Trap:</strong> Forgetting toggle the cell in "Parameters" mode prevents the Pipeline from passing its values. The Notebook will run with default values without error message — hard to debug.</p>
+</blockquote>
+<p>To test it is pssoble to execute this command</p>
+<pre><code class="language-powershell">print(call_file_path)
+</code></pre>
+<p>With a result</p>
+<pre><code class="language-text"> Files/audio_calls/CALL_0001.txt
+</code></pre>
+<p>It is necessary to install sentencepiece which is a necessary dependency</p>
+<pre><code class="language-python">&lt;a id=&quot;cell-installation-of-packages-via-session-spark-recommand-in-pipeline&quot;&gt;&lt;/a&gt;
+#===CELLULE: Installation of packages via Spark session (recommended in Pipeline) ===
+
+import subprocess
+import sys
+
+def install package(package):
+subprocess.check call([sys. executable, quot;-m quot;, quot;, install quot;, package, quot;--quiet quot;])
+
+Print(&quot;Installation of necessary packages...)
+install package(&quot;processers&quot;)
+install package(&quot;torch&quot;)
+install package(&quot;sentencepiece&quot;)
+
+print(&quot;) Successfully Installed Packages)
+</code></pre>
+<p><a id="13-cellule-2-extraction-du-callid-depuis-le-chemin"></a></p>
+<h3>1.3 — Cell 2: Extract call id from</h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-2-extraction-du-callid&quot;&lt;/a&gt;
+#=== CELL 2: Extracting call id ===
+#
+&lt;a id=&quot;Objective-to-deliver-the-called-since-the-file-receiv-in-paramet;&lt;/a&gt;
+# OBJECTIVE: Derive the call id from the received file path as a parameter.
+#
+Example-filesaudiocallscallscall0121txt&quot;&gt;&lt;/a&gt;
+# Example: &quot;Files/audio calls/CALL 0121.txt&quot;
+&lt;a id=&quot;callid-call0121&quot;&lt;/a&gt;
+# → call id = &quot;CALL 0121&quot;
+#
+&lt;a id=&quot;-used-ospathbasenam-to-extract the file name&gt;&lt;/a&gt;
+# We use os.path.basenam to extract the file name,
+&lt;a id=&quot;then-strreplace-to-delete-extension&lt;/a&gt;
+# then str.replace to remove the extension.
+If the path contains sub-sub-dossiers, then the sub-dossiers are the same.
+# Robust even if the path contains additional subfolders.
+
+import bone
+import
+
+filename = os.path.basenam(call file path) # &quot;CALL 0121.txt&quot;
+call id = filename.place(&quot;.txt&quot;, quot;) # &quot;CALL 0121&quot;
+
+&lt;a id=&quot;validation-la-callid-must-correspond-au-pattern-callxxxxx&quot;&gt;/a&gt;
+# Validation: the call id must match the CALL XXXX pattern
+if not re.match(r&quot;^CALL \d{4}$&quot;, call id):
+raise ValueError(e&quot;Format call id invalid: '{call id}'. Expected: CALL XXXX&quot;)
+
+print(e&quot;call id extracted: {call id}&quot;)
+</code></pre>
+<p><a id="14-cellule-3-lecture-et-enrichissement-du-fichier"></a></p>
+<h3>1.4 — Cell 3: File Reading and Enrichment</h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-3-processing-dun-only-call-version-corrected&lt;/a&gt;
+#=== CELL 3: Processing a single call (corrected version) ===
+
+from transforms import pipeline as hf pipeline
+import pyspark.sql.functions as F
+
+&lt;a id=&quot;variable-by-default;&gt;&lt;/a&gt;
+* ===========================********************************************************************************************************************************************************************************************************************************************************
+&lt;a id=&quot;security-values-by-default-if-the-cell-is-executed-isolation&gt;&lt;/a&gt;
+# Security: default values if the cell is executed in isolation
+try:
+call file path
+except NameError:
+call file path = &quot;Files/audio calls/CALL 0001.txt&quot;
+
+try:
+call id
+except NameError:
+# File name is extracted as call id (ex: CALL 0001)
+call id = call file path.split(&quot;/&quot;)[-1].
+
+If you want to do that, you'll have to do it.
+#========================== ===== ===== ===== ===== ===== ===== ===== =====
+try:
+# mssparkutils.fs.head already returns a str (UTF-8)
+transcription text = mssparkutils.fs.head(call file path, 10000).strip()
+
+if not transcription text:
+raise ValueError(&quot; The file is empty or contains only spaces.
+
+print(f&quot;File read successfully: {(transcript text)} characters&quot;)
+print(e&quot; Call ID: {call id}
+
+except Exception as e:
+Raise FileNotFoundError(e&quot;Unable to read file {call file path}: {e}&quot;) from e
+
+&lt;a id=&quot;modelloading&lt;/a?gt;
+#=============================LOADING THE MODEL ===============================
+print(&quot; Loading the sentiment model (nlptown/bert-base-multilingual-uncased-sentiment)...
+feeling pipeline = hf pipeline(
+Sentiment-analysis quot;
+model=&quot;nlptown/bert-base-multilingual-uncased-sentiment&quot;
+device=1, # CPU
+truncation=True,
+max length=512
+)
+
+def mapper sentiment(label: str) -&gt; str:
+nb = int(label[0])
+if nb &lt;= 2:
+Return to negative quot;
+Elif nb== 3:
+Return quot;
+Else:
+positive quot;
+
+&lt;a id=&quot;principal function&lt;/a&gt;
+#==========================MAIN FUNCTION ======================================
+def enrich call id: str, text: str, dure sec: int = 180) -&gt; dict:
+&quot; & quot;
+Apply IA analysis and calculate the churn score for a single call.
+Returns a dictionary ready for the silver calls enrichis table.
+&quot; & quot;
+# Feeling IA
+res = sentiment pipeline([text], batch size=1)[0]
+sentiment ia = mapper sentiment(res[&quot;label&quot;])
+score sentiment = round(res[&quotescore&quot;], 4)
+
+# Intent detection (keywords)
+KEYWORDS INTENT = {
+(b) the amount of the tax payable on a taxable basis,
+Legal threat quot;: [Quot; counsel, quot; complaint, quot; dgccrf&quot;, quot; ombudsperson, quot; justice quot;],
+Technical complaint quot: [Quotation, quot; does not work quot; quot; repair quot; default quot; quot; quot;]
+"Quotation" means a statement of the meaning of the word "unacceptable" or "unacceptable" or "unacceptable".
+(b) the amount of tax payable on a daily basis;
+&quot; satisfaction quot: [thank you, excellent quot, perfect quot, satisfied quot, super quot],
+Information quot: [information quot, quot, I want to know],
+}
+
+text lower = text.lower()
+intent detect = other quot;
+forint, keywords in KEYWORDS INTENT.items():
+if any(kw in text lower for kw in keywords):
+int detect =intent
+Break
+
+# Churn risk score calculation
+score = 0
+if sentiment ia ==negative quot;
+score += 30
+word criterion = [Quott; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot; quot;]
+if any(m in text lower for m in words crit):
+score += 40
+if duration sec &gt; 300:
+score += 10
+
+score risk churn = min(score, 100)
+
+Return {
+&quot;call idquot;: call id,
+&quot; feeling: feeling ia,
+&quot; score sentiment&quot;: score sentiment,
+Intent detection,
+&quot; score risk churn&quot; score risk churn,
+Critical alert: score risk churn &gt;= 50,
+&duree sec&quot;: dure sec, # useful to keep it
+}
+
+
+(a) implementation
+#========================== EXECUTION ===============================
+result = enrich call id, transcription text, duration sec=180
+
+Print(e&quot;\n
+for k, v in result.items():
+print(e&quot; {k:20} : {v}&quot;)
+</code></pre>
+<p><a id="15-cellule-4-mise-a-jour-upsert-de-la-table-silver"></a></p>
+<h3>1.5 — Cell 4: UPSERT Table Update Silver</h3>
+<pre><code class="language-python">&lt;a id=&quot;cell-4-upsert-in-the-table-silver-delta-merge&gt;&lt;/a&gt;
+#=== CELL 4: UPSERT in Silver table (Delta MERGE) ===
+#
+&lt;a id=&quot;Objective-to-day-the-table-silvercallsenriched-for-the-call-trading&lt;/a&gt;
+# OBJECTIVE: Update the silver calls enriched table for the processed call id.
+&lt;a id=&quot;if-the-callid-exist-de-update-re-analysis&gt;&lt;/a&gt;
+# If call id already exists → UPDATE (re-analysis).
+If-the-callid-est-new-insert&gt;/a&gt;
+# If call id is new → INSERT.
+#
+&lt;a id=&quot;merge-into-est-la-command-delta-for-upserts&gt;&lt;/a&gt;
+# MERGE INTO is the Delta command for UPSERTS.
+More effective than-delete-insert-car-delta-ne-recrit-that-file-concerns&lt;/a&gt;
+# More efficient than DELETE + INSERT because Delta only rewrites the files concerned.
+#
+&lt;a id=&quot;note-mssparkutilsnotebookexit-return-un-json-au-pipeline-data-factory&quot;&gt;&lt;/a&gt;
+# Note: mssparkutils.notebook.exit() returns a JSON to Pipeline Data Factory.
+&lt;a id=&quot;that-json-contains-the-score-churn-and-the-file-really-traffic-quot;&gt;/a&gt;
+# This JSON contains the churn score AND the path of the actually processed file.
+&lt;a id=&quot;the-pipeline-use-jsonscore-for-the-alert-condition&gt;&lt;/a&gt;
+# Pipeline uses json(...).score for alert condition
+&lt;a id=&quot;and-jsonfile-to-identify the-file-in-logs-monitor&lt;/a&gt;
+# and json(...).file to identify the file in log Monitor.
+
+from datetime import datetime
+from pyspark.sql import Row
+
+&lt;a id=&quot;creation-dun-dataframe-temporary-with-result&lt;/a&gt;
+# Create a temporary DataFrame with the result
+df new = spark.createDataFrame([Row(
+call id = result[&quot;call id&quot;],
+sentiment ia = result[&quot;sentiment ia&quot;]
+score sentiment = float(result[&quot;score sentiment&quot;]),
+Intent detect = result[&quot detect quot;],
+score risk churn=int(result[&quot;score risk churn&quot;]),
+critical alert = bool(result[&quot; critical alert&quot;]),
+date mise a jour = datetime.now().strftime(&quot;%Y-%m-%d %H:%M:%S&quot;),
+( ))
+df new.createOrReplaceTempView(&quot;staging calling&quot;)
+
+(a) id=&quot;merge-into-upsert-sur-callid&quot;&gt;/a&gt;
+# INTO MERGE : UPSERT on call id
+Spark.sql(&quot; & quot;
+MERGE INTO silver calls enriched AS target
+USING staging call AS source
+ON target.call id = source.call id
+WHEN MATCHED THEN
+UPDATE SET
+target.sentiment ia = source.sentiment ia,
+target. score sentiment = source. score sentiment,
+target.intent detect = source.intent detecte,
+target.score risk churn = source.score risk churn,
+target.critical alert = source.critical alert
+WHEN NOT MATCHED THEN
+INSERT (call id, feeling ia, score sentiment,
+detect, score risk churn, critical alert)
+VALUE (source.call id, source.sentiment ia, source. score sentiment,
+source.intent detecte, source.score risk churn, source.critical alert)
+(Quoted)
+
+print(e&quot;MERGE completed for {call id}&quot;)
+print(e&quot; Score churn: {result['score risk churn']} — Alert: {result['critical alert']}&quot;)
+
+&lt;a id=&quot;-&gt;&lt;/a&gt;
+# -----------------------------------------------------------------------
+&lt;a id=&quot;criture-in-table-critical alerts-si-score-50&quot;&gt;&lt;/a&gt;
+# WRITING IN THE Critical Warning Table (if score ≥ 50)
+&lt;a id=&quot;--1&quot;&lt;/a&gt;
+# -----------------------------------------------------------------------
+This table-is-the-only-notification-necessary-is-is-quot;
+# This table is the only notification quot; necessary: it is
+&lt;a id=&quot;requestable-en-sql-visible-in-power-bi-and-ne-dependent-none&gt;&lt;/a&gt;
+# queryable in SQL, visible in Power BI, and does not depend on any
+&lt;a id=&quot;external-not-team-not-mail-not-webhook&quot;&gt;&lt;/a&gt;
+# external service (no Teams, no email, no webhook).
+#
+&lt;a id=&quot;le-pipeline-lit-le-score-via-mssparkutilsnotebookexit&lt;/a&gt;
+# Pipeline reads the score via mssparkutils.notebook.exit()
+&lt;a id=&quot;to-show-the-status-in-the-manager-manager-of-manager-of-manager-of-manager;&gt;&lt;/agt;
+# to display status in Fabric's Monitor panel.
+
+if result[&quot; critical alert&quot;]:
+df alert = spark.createDataFrame([{
+,
+&quot; score risk churn&quot; int(result[&quot risk churn&quot;]),
+,
+Intent detect quot;: result[&quot detect quot;],
+Status:
+&quot;date alert&quot;: datetime.now().strftime(&quot;%Y-%m-%d %H:%M:%S&quot;),
+}])
+df alert.write.mode(&quot;append&quot;).format(&quot;delta&quot;).saveAsTable(&quot; critical alerts&quot;)
+print(e&quot;) Written alert in critical alerts for {call id}&quot;)
+Else:
+print(e&quot;) Call {call id} processed without warning (score = {result['score risk churn']})&quot;)
+
+&lt;a id=&quot;return-un-json-au-pipeline-visible-in-monitor-sign-output&quot;&gt;/a&gt;
+# Returns a JSON to the Pipeline → visible in Monitor → output panel
+&lt;a id=&quot;contains-the-score-and-the-file-real-treat-detect-automatically&gt;&lt;/a&gt;
+# Contains score AND file actually processed ( automatically detected)
+&lt;a id=&quot;le-pipeline-lit-jsonscore-for-the-condition-and-jsonfile-for-logs&lt;/a&gt;
+# The Pipeline lit json(...).score for condition and json(...).file for logs
+import json
+mssparkutils.notebook.exit(json.dumps({
+,
+&quot;file: call file path
+(2))
+</code></pre>
+<hr />
+<p><a id="bloc-2-pipeline-data-factory"></a></p>
+<h2>Bloc 2 — Pipeline Data Factory</h2>
+<p><a id="21-creer-le-pipeline"></a></p>
+<h3>2.1 — Creating the Pipeline</h3>
+<ol>
+<li>Workspace → <strong>+ New item</strong> → <strong>Data pipeline</strong></li>
+<li>Nommer : <code>PL_Traitement_Appel_Entrant</code></li>
+</ol>
+<p><a id="22-activite-1-notebook-parametre"></a></p>
+<h3>2.2 — Activity 1: Set-up Notebook</h3>
+<ol>
+<li>In the canvas → <strong>Activities</strong> (panneau gauche) → glisser <strong>Notebook</strong> on the canvas</li>
+<li>Name the activity: <code>ACT_Analyser_Appel</code></li>
+<li>In the <strong>Settings</strong> :<br />
+  - <strong>Notebook</strong> : <code>NB_Incremental_Processing</code><br />
+  - <strong>Base parameters</strong> → <strong>+ New parameter</strong> :<ul>
+<li>Nom : <code>call_file_path</code></li>
+<li>Value: @pipeline().parameters.file enter</li>
+</ul>
+</li>
+</ol>
+<blockquote>
+<p>💡 <strong>Explication <code>@pipeline().parameters.fichier_entrant</code> :</strong> tab This dynamic expression (data Factory expression language) reads the value of the <code>fichier_entrant</code> parameter that will be passed to Pipeline at the time of triggering (by Eventstream or manually for testing).</p>
+</blockquote>
+<ol start="4">
+<li>Onglet <strong>Parameters</strong> Pipeline (not activity) → <strong>+ New</strong> :<br />
+  - Nom : <code>fichier_entrant</code><br />
+  - Type : <code>String</code><br />
+  - Default value: <code>Files/audio_calls/CALL_0001.txt</code></li>
+</ol>
+<p><a id="23-activite-2-condition-if-seuil-alerte"></a></p>
+<h3>2.3 — Activity 2: Condition If (alert threshold)</h3>
+<ol>
+<li>
+<p>Glisser <strong>If Condition</strong> on the canvas after <code>ACT_Analyser_Appel</code></p>
+</li>
+<li>
+<p>Relier <code>ACT_Analyser_Appel</code> → <code>If Condition</code> (green arrow = success)</p>
+</li>
+<li>
+<p>Nommer : <code>ACT_Condition_Alerte</code></p>
+</li>
+<li>
+<p>Expression :</p>
+</li>
+</ol>
+<p><code>@greaterOrEquals(
+    int(json(activity('ACT_Analyser_Appel').output.result.exitValue).score),
+    50
+  )</code></p>
+<blockquote>
+<p>💡 <strong>Explication :</strong> <code>activity('ACT_Analyser_Appel').output.result.exitValue</code> recovers the JSON returned by <code>mssparkutils.notebook.exit()</code>. <code>json(...).score</code> extracted the numerical score, converted in whole with <code>int()</code> for comparison at threshold 50.</p>
+</blockquote>
+<p><strong>Branch TRUE — Registered Alert:</strong></p>
+<ol>
+<li>
+<p>In the branch TRUE → <strong>+ Add activity</strong> → <strong>Set variable</strong></p>
+</li>
+<li>
+<p>Nommer : <code>ACT_Log_Alerte</code></p>
+</li>
+<li>
+<p>Pipeline Variables → <strong>+ New</strong> : nom <code>statut_traitement</code>, type <code>String</code></p>
+</li>
+<li>
+<p>Value:</p>
+</li>
+</ol>
+<p><code>@concat('CRITICAL ALERT — ',
+json(activity('ACT Analyser Call').output.result.exitValue).file,
+' — Score: ',
+string(json(activity('ACT Analyser Call').output.result.exitValue).score),
+'/100')</code></p>
+<ol start="5">
+<li>This value appears in <strong>Monitor → Pipeline runs → Output</strong> of each</li>
+</ol>
+<blockquote>
+<p>execution The alert is already written in <code>alertes_critiques</code> by the Notebook (Cellule 4). This Variable Set activity is only used to make the <strong>status readable in Fabric</strong> Monitor panel without any additional tools.</p>
+</blockquote>
+<p><strong>Branche FALSE — Logging normal :</strong></p>
+<ol>
+<li>
+<p>In the FALSE → <strong>+ Add activity</strong> → <strong>Set variable</strong></p>
+</li>
+<li>
+<p>Nommer : <code>ACT_Log_Normal</code></p>
+</li>
+<li>
+<p>branch Same variable <code>statut_traitement</code></p>
+</li>
+<li>
+<p>Value:</p>
+</li>
+</ol>
+<p><code>@concat('OK — ',
+json(activity('ACT Analyser Call').output.result.exitValue).file,
+'without warning')</code></p>
+<p><a id="24-test-manuel-du-pipeline"></a></p>
+<h3>2.4 — Manual Pipeline Test</h3>
+<ol>
+<li>In the Pipeline → click <strong>Validate</strong> (top bar) → <strong>Run</strong></li>
+<li>In the popup → <strong>fichier_entrant</strong> : <code>Files/audio_calls/CALL_0001.txt</code></li>
+<li>Cliquer <strong>OK</strong></li>
+<li>Observe execution in panel <strong>Output</strong> en bas :<br />
+  - <code>ACT_Analyser_Appel</code> → statut In progress → Succeeded<br />
+  - <code>ACT_Condition_Alerte</code> → True or False according to score<br />
+  - Related activity → Followed</li>
+</ol>
+<hr />
+<p><a id="bloc-3-declencheur-automatique-trigger-onelake"></a></p>
+<h3>Block 3 — Automatic trigger (trigger OneLake)</h3>
+<blockquote>
+<p>💡 <strong>Architecture retenue</strong> :<br />
+Pipeline automatically triggers each new file filed in <code>LH_SolarVoix/Files/audio_calls/</code> via a OneLake Events trigger.<br />
+The file to be processed is detected by the Notebook itself (comparison of the file vs Silver).</p>
+</blockquote>
+<p><a id="31-configurer-le-trigger-onelake-events-declenchement-sur-nouveau-fichier"></a></p>
+<h4>3.1 — Configure OneLake Events trigger</h4>
+<ol>
+<li>
+<p>Open Pipeline <code>PL_Traitement_Appel_Entrant</code></p>
+</li>
+<li>
+<p>Onglet <strong>Home</strong> → <strong>Trigger</strong> → <strong>+ Add trigger</strong></p>
+</li>
+<li>
+<p><strong>Rule name</strong> : <code>TR_test</code></p>
+</li>
+<li>
+<p><strong>Monitor</strong> : Select source events → <strong>OneLake events</strong></p>
+</li>
+<li>
+<p><strong>Select event type(s)</strong> → <code>Microsoft.Fabric.OneLake.FileCreated</code></p>
+</li>
+<li>
+<p><strong>Add a OneLake source</strong> → select <code>LH_SolarVoix</code></p>
+</li>
+<li>
+<p><strong>Set filters</strong> — add the following two filters via <strong>+ Filter</strong> :</p>
+</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Operator</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data.url</code></td>
+<td>String contains</td>
+<td><code>audio_calls/</code></td>
+</tr>
+<tr>
+<td><code>data.url</code></td>
+<td>String ends with</td>
+<td><code>.txt</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>The first filter only targets the folder <code>audio_calls/</code>. The second ensures that the trigger only starts on files <code>.txt</code> (not on folder creations or other file types).</p>
+</blockquote>
+<ol start="8">
+<li>Cliquer <strong>OK</strong> then <strong>Save</strong> Pipeline</li>
+</ol>
+<blockquote>
+<p>This trigger triggers each new file <code>.txt</code> created in <code>Files/audio_calls/</code>. The Notebook automatically detects which process via comparison vs Silver folder.</p>
+</blockquote>
+<p><a id="32-modifier-le-notebook-pour-la-detection-automatique-des-nouveaux-fichiers"></a></p>
+<h4>3.2 — Modify the Notebook for automatic detection of new files</h4>
+<p>Replaces <strong>**Cellule 1</strong> Notebook <code>NB_Incremental_Processing</code> by the following code:</p>
+<pre><code class="language-python">&lt;a id=&quot;cell-1-parameter-detection-automatic-of-new files&gt;/agt;
+CELL 1: Parameter + Automatic detection of new files
+#
+&lt;a id=&quot;Objective-Keep-compatibility-with-test-manuals-and-permit&lt;/a&gt;
+# OBJECTIVE: Keep compatibility with manual tests AND allow
+&lt;a id=&quot;-detection-automatic-when-notebook-is-called-by-pipeline-plans&gt;&lt;/a&gt;
+# Automatic detection when the Notebook is called by the planned Pipeline.
+
+&lt;a id=&quot;value-by-default-for-manual-tests-of-notebook&gt;/a&gt;
+# Default value for Notebook manual tests
+call file path = &quot;Files/audio calls/CALL 0001.txt&quot;
+
+try:
+#===Automatic detection of new files ===
+files folder = mssparkutils.fs.ls(&quot;Files/audio calls/&quot;)
+ids folder = {
+f.name.place(.txt&quot;,quot;)
+for f in files folder
+if f.name.endswith(&quot.txt&quot;)
+}
+
+# call ids already processed in silver calls enriched
+df silver = spark.table(&quot;silver calls enriched&quot;)
+ids silver = {row.call id forrow in df silver.select(&quot;call id&quot;).collect()}
+
+new ideas = ids folder - ids silver
+
+Print Files in audio calls: {len(ids folder)}&quot;)
+Print Calls already processed in Silver: {len(ids silver)}&quot;)
+Print New calls to be processed: {new ideas}&quot;)
+
+if new ideas:
+# We take the oldest (literal tri)
+call id temp = sort(new ids)[0]
+call file path = f&quot;Files/audio calls/{call id temp}. txt&quot;
+print New file detected automatically → {call file path}&quot;)
+Else:
+print(&quot;) No new files detected. Using default for manual test.
+
+except Exception as e:
+Print
+Print(&quot;→ Using the default parameter value.
+
+print(e&quot;Final parameter used: call file path = {call file path}&quot;)
+</code></pre>
+<p><a id="ordre-dexecution-pour-le-test-le-plus-efficace"></a></p>
+<h3>Order of execution for the test (most effective):</h3>
+<ol>
+<li>
+<p><strong>D’abord</strong> : Runs the Test Notebook (<code>Test_Simulation_Appel_Critique</code>)<br />
+  → This creates the file <code>CALL_0121.txt</code> in the folder <code>Files/audio_calls/</code></p>
+</li>
+<li>
+<p><strong>Ensuite</strong> : You have two possibilities :</p>
+</li>
+</ol>
+<ul>
+<li>
+<p><strong>Quick option (recommended to test now)</strong> :<br />
+    Go to your Pipeline <code>PL_Traitement_Appel_Entrant</code> → click on <strong>Debug</strong><br />
+    → Launches the pipeline manual execution.</p>
+</li>
+<li>
+<p><strong>Option automatique</strong> :<br />
+    Place a new file in <code>Files/audio_calls/</code> → OneLake Events triggers the Pipeline automatically.</p>
+</li>
+</ul>
+<hr />
+<p><a id="34-test-de-bout-en-bout"></a></p>
+<h3>3.4 — Test de bout en bout</h3>
+<ol>
+<li><strong>Create a Test Notebook</strong> :</li>
+</ol>
+<ul>
+<li>Workspace → <strong>+ New item</strong> → <strong>Notebook</strong></li>
+<li>Nom : <code>Test_Simulation_Appel_Critique</code></li>
+<li>Attach Lakehouse <code>LH_SolarVoix</code><br />
+2. <strong>Step 0 — Initialize the table <code>alertes_critiques</code></strong> (to be executed first):</li>
+</ul>
+<blockquote>
+<p>This cell creates the empty table if it does not exist yet, which avoids error <code>Invalid object name</code> later SQL checks.</p>
+</blockquote>
+<pre><code class="language-python">&lt;a id=&quot;Initialization-creation-preventive-table-critical alerts&gt;&lt;/a&gt;
+#=== INITIALIZATION — Preventive creation of the critical alert table ===
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, TimestampType
+from datetime import datetime
+
+schema alerts = StructType([
+StructuralField(&quot;call id&quot;, StringType(), True),
+StructuralField(&quot;client id&quot;, StringType(), True),
+StructuralField(&product quot, StringType(), True),
+StructuralField(&quot;score risk churn&quot;, IntegerType(), True),
+StructuralField(&quot;sentiment ia&quot;, StringType(), True),
+StructuralField(&quott detection&quot;, StringType(), True),
+StructureField(&quote call quot;, StringType(), True),
+StructuralField(&quot;statut&quot;, StringType(), True),
+StructuralField(&quot;date alert&quot;, TimestampType(), True),
+])
+
+&lt;a id=&quot;cree-la-table-delta-vide-only-if-nexist-not-yet;&gt;/a&gt;
+# Create the empty Delta table only if it doesn't already exist
+if not spark.catalog.tableExists(&quot; critical alerts&quot;):
+df vide = spark.createDataFrame([], schema alerts)
+df vide.write.format(&quot;delta&quot;).saveAsTable(&quot;critical alerts&quot;)
+print(&quot;) Critical alert table created (empty) — ready to receive alerts.
+Else:
+Print(&quot;i) already existing critical alert table.
+</code></pre>
+<ol start="3">
+<li><strong>Run simulation script</strong> :</li>
+</ol>
+<pre><code class="language-python">&lt;a id=&t;simulation test-creation-dun-new-critical call-quot;&gt;&lt;/a&gt;
+#=== SIMULATION TEST — Creation of a new critical call ===
+
+text critic = &quot;&quot;[Incoming call - 08/04/2026] Client: Marie Dubois.
+Product concerned: PAC heat pump.
+Transcript: I'm extremely angry. Your heat pump broke down
+For the third time this month. I have young children and it's cold.
+I contacted your VAS five times without results. I'll cancel my contract tomorrow.
+And contact my lawyer. This is inadmissible and I want a full refund. & quot;
+
+mssparkutils.fs.put(
+Files/audio calls/CALL 0121.txt&quot;
+critic text,
+overwrite=True
+)
+
+print(&quot;) File CALL 0121.txt created in audio calls/&quot;)
+</code></pre>
+<p>--</p>
+<p><strong>Simple summary:</strong></p>
+<ol>
+<li>Run the cell <strong>Step 0</strong> → table <code>alertes_critiques</code> is guaranteed to exist</li>
+<li>Run simulation script → file <code>CALL_0121.txt</code> established</li>
+<li>Launch Pipeline → processing + writing alert</li>
+<li>Check via <code>spark.sql()</code> or SQL endpoint</li>
+</ol></main>
+</body>
+</html>

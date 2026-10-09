@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notebooks Workshop – Silver Layer</title>
+  <link rel="stylesheet" href="../assets/source.css">
+</head>
+<body>
+  <header class="src-header">
+    <a href="../index.html" class="back-link">&#8592; Back to presentation</a>
+    <h1 class="src-title">Notebooks Workshop – Silver Layer</h1>
+  </header>
+  <main class="src-content"><p><a id="atelier-2-couche-silver-nettoyage-et-enrichissement"></a></p>
+<h1>WORKSHOP 2: SILVER COVER — CLEANING AND ENRICHING</h1>
+<p><strong>Lakehouse</strong> : <code>Lakehouse_silver</code><br />
+<strong>Notebook</strong> : <code>NB_02_Silver</code><br />
+<strong>Objective</strong> : Clean, standardize, enrich and structure data for analysis</p>
+<hr />
+<p><a id="objectif-de-latelier"></a></p>
+<h2>The objective of the workshop</h2>
+<p>The <strong>Silver layer</strong> Medallion Architecture is the critical step between raw data (Bronze) and business data (Gold).</p>
+<p><a id="quest-ce-qui-change-par-rapport-a-bronze"></a></p>
+<h3>What changes with regard to Bronze?</h3>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Bronze</th>
+<th>Silver</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Data status</strong></td>
+<td>Gross, heterogeneous, with errors</td>
+<td>Cleaned, validated, standardized</td>
+</tr>
+<tr>
+<td><strong>Granularity</strong></td>
+<td>15 min (18 144 lines)</td>
+<td>Aggregate schedule (4 320 lines)</td>
+</tr>
+<tr>
+<td><strong>Enrichissement</strong></td>
+<td>None</td>
+<td>Baseline, anomalies, weather, prices</td>
+</tr>
+<tr>
+<td><strong>Date Format</strong></td>
+<td>Straightens (ISO, FR, US)</td>
+<td>Unified in timestamp UTC</td>
+</tr>
+<tr>
+<td><strong>Jointures</strong></td>
+<td>Minimales</td>
+<td>Price market + reference sites + weather</td>
+</tr>
+<tr>
+<td><strong>Objective</strong></td>
+<td>Integrated archiving</td>
+<td>Support analytique</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Business value added</strong> :<br />
+- Detection of consumption anomalies (z-score &gt; 3γ)<br />
+- Comparaison vs baseline 7 jours glissants<br />
+- Hourly prediction model for optimization<br />
+- Enrichment of EPEX prices for financial analysis</p>
+<hr />
+<p><a id="contexte-et-donnees-dentree"></a></p>
+<h2>Background and input data</h2>
+<p><a id="donnees-de-depart-bronze"></a></p>
+<h3>Baseline (Bronze)</h3>
+<p><strong>Parc</strong> : 6 production/power consumption sites (flexible mix and base-load)<br />
+<strong>Period</strong> : 30 jours de janvier 2025<br />
+<strong>Gross frequency</strong> : every 15 minutes<br />
+<strong>Volume initial</strong> : <strong>18 144 lines</strong> with:<br />
+- Doubles (364 lines)<br />
+- Invalid values (NULL, negative error codes, outside)<br />
+- Formats of heterogeneous dates<br />
+- Lack of market prices and metadata</p>
+<p><a id="problemes-a-corriger-en-silver"></a></p>
+<h3>Problems to correct in Silver</h3>
+<ol>
+<li><strong>Doublons</strong> : 364 duplicate lines (identical on all fields)</li>
+<li><strong>Valeurs invalides</strong> : 1,764 lines with NULL, error codes, or externals &gt;10 MW</li>
+<li><strong>Various dates</strong> : mixture of ISO 8601, French format (dd/MM/yyyy), American format</li>
+<li><strong>Granularity</strong> : combine 4 points (15 min) in 1 hourly value with min/max/avg</li>
+<li><strong>Manque de contexte</strong> : no EPEX prices, no metadata sites, no weather</li>
+<li><strong>No detection of anomalies</strong> : no statistical metrics</li>
+</ol>
+<p><a id="resultat-attendu"></a></p>
+<h3>Expected result</h3>
+<p><strong>7 tables Silver</strong> :<br />
+- <code>consumption_dedup</code> : 17,280 lines (post-diffusion)<br />
+- <code>consumption_clean</code> : 16,380 lines (post-cleaning)<br />
+- <code>consumption_dates_fixed</code> 16 380 lines (standardized dates)<br />
+- <code>consumption_hourly</code> : 4,320 lines (hourly aggregation)<br />
+- <code>consumption_with_prices</code> : 4,320 lines (enriched EPEX price)<br />
+- <code>consumption_enriched</code> : 4,320 lines (rich baseline, anomalies, weather, ML)<br />
+- <code>consumption_predictions</code> : 4,320 lines (weighted predictive model)</p>
+<p><strong>Pipeline visuel</strong> :</p>
+<pre><code>Bronze (18 144 lines)
+DISTINCT
+Dedup (17 280 lines)
+Filter (NULL, &lt;0, &gt;10)
+Clean (16,380 lines)
+Standardisation dates
+Dates fixed (16,380 lines)
+Aggregation 15min → 1h
+Hourly (4 320 lines)
+▼ JOIN EPEX price
+With prices (4 320 lines)
+▼ Window Functions (baseline, z-score, lag)
+Enriched (4 320 lines)
+Weighted prediction
+Predictions (4 320 lines) → Gold
+</code></pre>
+<hr />
+<p><a id="prerequis"></a></p>
+<h2>Prerequisites</h2>
+<p>Before starting the workshop, make sure that:</p>
+<ol>
+<li><strong>Lakehouse silver created</strong> : From workspace Fabric, create a lakehouse named <code>Lakehouse_silver</code></li>
+<li><strong>Notebook NB_02_Silver ouvert</strong> : Create a new Python/SQL notebook in Lakehouse silver</li>
+<li><strong>Lakehouses attached</strong> :<br />
+   - Add <strong>Lakehouse_bronze</strong> en tant que lakehouse <strong>secondaire</strong> (read only)<br />
+   - Define <strong>Lakehouse_silver</strong> Like lakehouse <strong>default</strong> (reading/writing)</li>
+<li><strong>Bronze populated</strong> : Workshop 1 (Bronze) must be executed with its 18 144 lines</li>
+</ol>
+<p><a id="etapes-techniques-2-min"></a></p>
+<h3>Technical steps (2 min)</h3>
+<pre><code>1. Workspace → Create → Lakehouse → `Lakehouse silver`
+2. Lakehouse silver → Open → Create a notebook
+3. Notebook → Settings → Add lakehouses :
+- Lakehouse bronze (Secondary)
+- Lakehouse silver (By default)
+4. Validate and start cells
+</code></pre>
+<hr />
+<p><a id="cellule-0-exploration-initiale-depuis-bronze"></a></p>
+<h2>Cell 0: Initial Exploration from Bronze</h2>
+<p><a id="avant-dexecuter"></a></p>
+<h3>Before executing</h3>
+<p>We begin by exploring Bronze data to understand their current state. This cell must be launched in <strong>premier</strong> for:<br />
+- Check that Bronze is readable<br />
+- Count 18,144 gross lines<br />
+- View a sample of data (clean and mixed errors)</p>
+<p>The query uses <code>Lakehouse_bronze.bronze.consumption_raw</code> : it describes the remote lakehouse and the scheme to avoid any ambiguity.</p>
+<p><a id="code"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">df = spark.sql(&quot;SELECT * FROM Lakehouse bronze.bronze.consumption raw&quot;)
+df.show(10)
+Print(e&quot;) Bronze data: {df.count()} lines&quot;)
+</code></pre>
+<p><a id="resultat"></a></p>
+<h3>Results</h3>
+<pre><code>Bronze data: 18144 lines
+
++-------------------------------------------------------------------------------------------------------------------------------
+-timestamp-site-id-consumption-mw-voltage-v-frequency-hz-status
++-------------------------------------------------------------------------------------------------------------------------------
+-2025-01-01 00:15:00
+-2025-01-01 00:30:00 -SITE COM 001
+-2025-01-01 00:45:00
+-2025-01-01 00:15:00 -SITE COM 001 - 0.3423 - 229.5 - 50.0 - 1 (double)
+2025-01-01 01:00:00-SITE PRD 002
+01:15:00SITE PRD 002
+01:30:00SITE COM 004
+·2025-01-02 08:45:00
+- 01/02/25 09:00:00 - SITE FLX 005
+-2025-01-02 09:15:00
++-------------------------------------------------------------------------------------------------------------------------------
+</code></pre>
+<p><a id="interpretation"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Key observations</strong> :</p>
+<ol>
+<li><strong>Volume</strong> : 18,144 lines over 30 days × 6 sites × 96 measurements/day (15 min) = according to theory (30 × 6 × 96 = 17,280 expected to be cleaned, thus 864 = 4.8% duplicates + errors)</li>
+<li><strong>Doublons visibles</strong> : the 4th line is identical to the 3rd (same timestamp, site id, consumption mw)</li>
+<li><strong>Valeurs invalides</strong> :<br />
+   - Line 5: <code>consumption_mw = -0.0001</code> (negative error code)<br />
+   - Line 6: <code>consumption_mw = NULL</code> and <code>status = -1</code> (corrupt data)<br />
+   - Line 7: <code>consumption_mw = 15.45 MW</code> (10 MW, would exceed normal capacity)</li>
+<li><strong>Differentiated Date Formats</strong> :<br />
+   - Line 8 : ISO 8601 <code>2025-01-02 08:45:00</code> ✓<br />
+   - Line 9 : French format <code>01/02/2025 09:00:00</code> (ambiguous: Jan 2 or Feb 1 ?)</li>
+<li><strong>Colonnes</strong> : 6 colonnes (timestamp, site_id, consumption_mw, voltage_v, frequency_hz, status)</li>
+</ol>
+<p><strong>Action required</strong> : undo, validate, normalize dates, aggregate on schedule.</p>
+<hr />
+<p><a id="cellule-1-creation-du-schema-silver"></a></p>
+<h2>Cell 1: Creating the silver scheme</h2>
+<p><a id="avant-dexecuter-1"></a></p>
+<h3>Before executing</h3>
+<p>Before creating Silver tables, we need to create a <strong>scheme</strong> which will contain them. A schema is a logical container within the lakehouse (analog to a database).</p>
+<p>This cell uses <code>CREATE SCHEMA IF NOT EXISTS</code> for:<br />
+- Create the schema <code>silver</code> in <code>Lakehouse_silver</code> (default)<br />
+- To be ideal: if the scheme exists, do nothing (if not wrong)</p>
+<p>This is a quick technical step but <strong>obligatoire</strong> before the next cells.</p>
+<p><a id="code-1"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">Spark.sql(&quot;CREATE SCHEMA IF NOT EXISTS Lakehouse silver.silver&quot;)
+print('The diagram is ready')
+</code></pre>
+<p><a id="resultat-1"></a></p>
+<h3>Results</h3>
+<pre><code>The scheme is ready
+</code></pre>
+<p><a id="interpretation-1"></a></p>
+<h3>Interpretation</h3>
+<p>No digital output: the <code>CREATE SCHEMA</code> is a DDL (Data Definition Language) operation that structures the lakehouse, not a SELECT query. The message confirms that the schema exists or was created. All the following tables will be stored in <code>Lakehouse_silver.silver.*</code>.</p>
+<hr />
+<p><a id="cellule-2-dedoublonnage-consumptiondedup"></a></p>
+<h2>Cell 2: Duplication (consumption dedup)</h2>
+<p><a id="avant-dexecuter-2"></a></p>
+<h3>Before executing</h3>
+<p>The first step of cleaning is <strong>eliminate exact duplicates</strong>. A duplicate is an identical line on all fields (timestamp, site id, consumption mw, etc.).</p>
+<p><strong>Why it's important</strong> :<br />
+- Doubles = pollution caused by IoT restarts or network replications<br />
+- May bias subsequent aggregations (average offset)<br />
+- Easy to detect and remove reversible</p>
+<p><strong>Approche</strong> :<br />
+- Use <code>SELECT DISTINCT *</code> : keep one copy of each unique combination<br />
+- Write in an intermediate table <code>consumption_dedup</code> (is not the final result)</p>
+<p><strong>Attente</strong> : change from 18 144 to ~17 280 lines (364 duplicates deleted </p>
+<p><a id="code-2"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">&lt;a id=&quot;confirm-le-lakehouse-active-le-lakehousebronze&quot;&gt;&lt;/a&gt;
+# Confirm lakehouse active Lakehouse bronze
+df schemas = spark.sql(&quot;SHOW SCHEMAS&quot;).toPandas()
+print(e&quot;) Available diagrams: {list(df schemas.iloc[:,0]}&quot;)
+
+
+df dedup = spark.sql(&quot;SELECT DISTINCT * FROM Lakehouse bronze.bronze.consumption raw&quot;)
+df dedup.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).saveAsTable(&quot;Lakehouse silver.silver.consumption dedup&quot;)
+print(f&quot;) Table silver.consumption dedup created: {df dedup.count()} lines&quot;)
+</code></pre>
+<p><a id="resultat-2"></a></p>
+<h3>Results</h3>
+<pre><code>Available diagrams: ['default', 'dbo']
+
+</code></pre>
+<p><a id="interpretation-2"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Key figures</strong> :<br />
+- <strong>Entry</strong> : 18,144 lines (Bronze)<br />
+- <strong>Sortie</strong> : 17,280 lines<br />
+- <strong>Deleted</strong> : 864 lines (4.7%) ← more than the 364 pure duplicates, because <code>DISTINCT</code> also eliminates variations on parasitic fields</p>
+<p><strong>Technique</strong> :<br />
+- <code>SELECT DISTINCT *</code> : Spark examines all columns. Two identical lines on (timestamp, site id, consumption mw, voltage v, frequency hz, status) = 1 only kept<br />
+- <code>df.write.mode("overwrite").format("delta")</code> : written in Delta format (native Lakehouse format, optimized for ACID)<br />
+- <code>.saveAsTable(...)</code> : creates a managed table (data stored in the lakehouse)</p>
+<p><strong>Benefit</strong> This table is now unique on each field combination.</p>
+<hr />
+<p><a id="cellule-3-filtrage-des-valeurs-invalides-consumptionclean"></a></p>
+<h2>Cell 3: Filtering invalid values (consumption clean)</h2>
+<p><a id="avant-dexecuter-3"></a></p>
+<h3>Before executing</h3>
+<p>After eliminating the duplicates, we filter the <strong>valeurs invalides</strong> :</p>
+<ol>
+<li><strong>NULL en consumption_mw</strong> (unusable)</li>
+<li><strong>consumption_mw &lt; 0</strong> : sensor error codes or corrupted data</li>
+<li><strong>consumption_mw ≥ 10 MW</strong> : extreme outlets (max expected capacity ~5 MW/site)</li>
+</ol>
+<p><strong>Why these thresholds?</strong><br />
+- Data from a real power plant: typical consumption 0.3–3 MW<br />
+- Threshold 10 MW = x3 above normal max = fault / sensor<br />
+- These outsides bias medium and ML models</p>
+<p><strong>Approche</strong> :<br />
+- Use <code>filter()</code> with logical conditions AND (<code>&amp;</code>)<br />
+- <code>F.col()</code> creates a column reference, <code>.isNotNull()</code> / Compares apply logic</p>
+<p><strong>Attente</strong> : from 17,280 to ~16,380 lines (900 invalid lines, 5 %)</p>
+<p><a id="code-3"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">from pyspark.sql import functions as F
+
+df clean = spark.table(&quot;Lakehouse silver.silver.consumption dedup&quot;).filter(
+(F.col(&quot;consumption mw&quot;).isNotNull()) &amp; # No NULL
+(F.col(&quot;consumption mw&quot;) &gt;=0) &amp; # No negative error codes
+(F.col(&quot;consumption mw&quot;)
+)
+
+df clean.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).saveAsTable(&quot;Lakehouse silver.silver.consumption clean&quot;)
+print(e&quot;) Table silver.consumption clean created: {df clean.count()} lines&quot;)
+</code></pre>
+<p><a id="resultat-3"></a></p>
+<h3>Results</h3>
+<pre><code>Table silver.consumption clean created: 16380 lines
+</code></pre>
+<p><a id="interpretation-3"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Key figures</strong> :<br />
+- <strong>Entry</strong> : 17,280 lines (after doubling)<br />
+- <strong>Sortie</strong> : 16,380 lines<br />
+- <strong>Deleted</strong> 900 lines (5.2%)<br />
+  - NULL : ~400<br />
+  - Negative: ~200<br />
+  - Outliers (≥10 MW) : ~300</p>
+<p><strong>Technique</strong> :<br />
+- <code>Spark.table()</code> : load an existing table (select equivalent *)<br />
+- <code>.filter()</code> : applies a boolean predicate<br />
+- <code>F.col("consumption_mw").isNotNull()</code> : NOT NULL check<br />
+- <code>(cond1) &amp; (cond2) &amp; (cond3)</code> : AND logic (all three must be true)</p>
+<p><strong>Benefit</strong> This table contains only valid and consistent values.</p>
+<hr />
+<p><a id="cellule-4-verification-du-nettoyage-rapport"></a></p>
+<h2>Cell 4: Cleaning check (report)</h2>
+<p><a id="avant-dexecuter-4"></a></p>
+<h3>Before executing</h3>
+<p>We synthesize the cleaning pipeline to take a step back. This cell <strong>does not create a table</strong>, but displays a comparative report:<br />
+- How many entry lines (Bronze)<br />
+- Combien en sortie (Clean)<br />
+- Percentage deleted</p>
+<p><strong>Why it's important</strong> :<br />
+- Trace data loss (normal: 9.7%, not 50%)<br />
+- Document cleaning for audit/compliance<br />
+- Verify that the thresholds applied are reasonable</p>
+<p><a id="code-4"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">If you want to count the lines
+# Count lines
+original count = spark.sql(&quot;SELECT COUNT(*) FROM Lakehouse bronze.bronze.consumption raw&quot;).collect()[0][0]
+clean count = spark.table(&quot;Lakehouse silver.silver.consumption clean&quot;).count()
+removed count = original count - clean count
+
+print(&quot;=&quot;*50)
+print(&quot;) VERIFICATION OF CLEANING)
+print(&quot;=&quot;*50)
+Original lines: {original count:,}&quot;)
+print(e&quot;Clean lines: {clean count:,}&quot;)
+print(e&quot;Lines deleted: {removed count:,} ({removed count/original count*100:.1f}%)&quot;)
+print(&quot;=&quot;*50)
+</code></pre>
+<p><a id="resultat-4"></a></p>
+<h3>Results</h3>
+<pre><code>===========================================================================
+AUDIT OF CLEANING
+===========================================================================
+Original lines : 18,144
+Cleaning lines: 16,380
+Deleted lines: 1,764 (9.7%)
+===========================================================================
+</code></pre>
+<p><a id="interpretation-4"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Interpretation of figures</strong> :</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+<th>Analyse</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Originales</strong></td>
+<td>18 144</td>
+<td>Volume Bronze complet</td>
+</tr>
+<tr>
+<td><strong>Cleaned</strong></td>
+<td>16 380</td>
+<td>Volume ready for aggregation</td>
+</tr>
+<tr>
+<td><strong>Deleted</strong></td>
+<td>1 764</td>
+<td>9.7% perte</td>
+</tr>
+<tr>
+<td><strong>Taux de perte</strong></td>
+<td>9.7%</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Technique Python</strong> :<br />
+- <code>.collect()[0][0]</code> : executes the COUNT request and recovers the scalar numerical value<br />
+- <code>.count()</code> : Spark action that counts the lines (slow on large data)<br />
+- <code>{original_count:,}</code> Number format with separators (e.g. 18,144)<br />
+- <code>{removed_count/original_count*100:.1f}%</code> : calculation of the percentage rounded to 1 decimal place</p>
+<p><strong>Benefit</strong> This report can be included in a dashboard or audit document.</p>
+<hr />
+<p><a id="cellule-5-normalisation-des-formats-de-dates-consumptiondatesfixed"></a></p>
+<h2>Cell 5: Standardization of date formats (consumption dates fixed)</h2>
+<p><a id="avant-dexecuter-5"></a></p>
+<h3>Before executing</h3>
+<p>The timestamps in Bronze are heterogeneous (ISO 8601, French dd/MM/yyyy, American). For aggregation and joins, it is necessary <strong>only one format: timestamp UTC</strong>.</p>
+<p><strong>Formats observed</strong> :<br />
+1. ISO 8601 : <code>2025-01-02T08:45:00Z</code> or <code>2025-01-02 08:45:00</code><br />
+2. French: <code>02/01/2025 08:45:00</code> (dd/MM/yyyy)<br />
+3. American: <code>01-02-2025 08:45:00</code> (MM-dd-yyyy)</p>
+<p><strong>Approche</strong> :<br />
+- Use <code>F.coalesce()</code> : try the first format, if <code>NULL</code> Try the second, etc.<br />
+- <code>F.to_timestamp(col)</code> : conversion native Spark<br />
+- <code>F.to_timestamp(col, pattern)</code> : with custom format</p>
+<p><strong>Attente</strong> : same number of rows (16,380), but new column <code>timestamp_clean</code> standardized in <code>TIMESTAMP</code> Spark.</p>
+<p><a id="code-5"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">from pyspark.sql import functions as F
+
+df = spark.table(&quot;Lakehouse silver.silver.consumption clean&quot;)
+
+&lt;a id=&quot;normalization-date-formats&gt;&lt;/a&gt;
+# Standardization Date formats
+df = df.withColumn(
+&timestamp cleanquot;
+F.coalesce(
+F.to timestamp(F.col(&quot;timestamp&quot;)), # ISO 8601
+F.to timestamp(F.col(&quot;timestamp&quot;), &quot;dd/MM/yyyy HH:mm:ss&quot;), # English
+F.to timestamp(F.col(&quot;timestamp&quot;), &quot;yyy-MM-dd HH:mm:ss&quot;) # American
+)
+)
+
+(a) to maintain the other columns
+# Keep other columns
+df = df.select(&quot;site id&quot;, quot;consumption mw&quot;, quot;volt v&quot;, quot;frequency hz&quot;, quot;status&quot;, quot;timestamp clean&quot;)
+
+df.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).SaveAsTable(&quot;Lakehouse silver.silver.consumption dates fixed&quot;)
+print(e&quot;) Table silver.consumption dates fixed created: {df.count()} lines&quot;)
+</code></pre>
+<p><a id="resultat-5"></a></p>
+<h3>Results</h3>
+<pre><code>Table silver.consumption dates fixed created: 16380 lines
+</code></pre>
+<p><a id="interpretation-5"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Key technique : F.coalesce()</strong></p>
+<p><code>F.coalesce()</code> essaie chaque expression <strong>in order</strong> :</p>
+<pre><code>coalesce(
+  F.to_timestamp(timestamp)                           → Essai 1 : ISO natif
+  F.to_timestamp(timestamp, &quot;dd/MM/yyyy HH:mm:ss&quot;)   → Essai 2 : Format FR
+  F.to_timestamp(timestamp, &quot;yyyy-MM-dd HH:mm:ss&quot;)   → Essai 3 : Format US
+)
+</code></pre>
+<ul>
+<li>If Test 1 succeeds (non-NULL) → use otherwise Test 2</li>
+<li>If all fail → NULL</li>
+</ul>
+<p><strong>Exemple</strong> :<br />
+Intake (timestamp)<br />
+|---|---|---|---|---|<br />
+| <code>2025-01-02 08:45:00</code> • Successes <code>2025-01-02 08:45:00</code> |<br />
+| <code>02/01/2025 08:45:00</code> · NULL <code>2025-01-02 08:45:00</code> |<br />
+| <code>01-02-2025 08:45:00</code> "NULL" <code>2025-01-02 08:45:00</code> |</p>
+<p><strong>Final selection</strong> :<br />
+- <code>.select("site_id", "consumption_mw", ...)</code> : keep only useful columns<br />
+- Colonne <code>timestamp</code> (heterogen) is deleted<br />
+- Nouvelle colonne <code>timestamp_clean</code> (Uniform) is retained</p>
+<p><strong>Benefit</strong> All dates are now in TIMESTAMP Spark, usable for Window Functions and aggregations.</p>
+<hr />
+<p><a id="cellule-6-agregation-horaire-consumptionhourly"></a></p>
+<h2>Cell 6: Time aggregation (consumption hourly)</h2>
+<p><a id="avant-dexecuter-6"></a></p>
+<h3>Before executing</h3>
+<p>Gross data are in <strong>15 minutes</strong>. For analysis and ML models, we aggregate to<strong>heure</strong> :<br />
+- 4 measurements (00, 15, 30, 45 min) → 1 hourly value<br />
+- Calculations: mean (avg), min, max, count (measurements)</p>
+<p><strong>Why this aggregation?</strong><br />
+1. <strong>Dimensional reduction</strong> : 18 144 → 4 320 lines (÷4, more handy)<br />
+2. <strong>Alignement temporel</strong> : time = standard for energy markets<br />
+3. <strong>Noise reduction</strong> : 4 point average smoothes sensor microvariations<br />
+4. <strong>Signs retained</strong> : min/max keep the hourly amplitude (deco/peak consumption)</p>
+<p><strong>Approche</strong> :<br />
+- <code>groupBy(date_trunc("hour", timestamp_clean), "site_id")</code> : aggregation by hour and site<br />
+- <code>.agg()</code> : aggregation calculations (avg, max, min, count)</p>
+<p><strong>Attente</strong> : 4,320 lines (6 sites × 30 days × 24 hours = 4,320 exact)</p>
+<p><a id="code-6"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">from pyspark.sql import functions as F
+
+df = spark.table(&quot;Lakehouse silver.silver.consumption dates fixed&quot;).filter(
+F.col(&quot;timestamp clean&quot;).isNotNull()
+)
+
+df hourly = df.groupBy(
+F.date trunc(&quothur&quot; &quothtimestamp clean&quot;).alias(&quothur&quot;),
+&quot; site id&quot;
+)agg(
+F.avg(&quot;consumption mw&quot;).alias(&quot;avg consumption mw&quot;),
+F.max(&quot;consumption mw&quot;).alias(&quot;max consumption mw&quot;),
+F.min(&quot;consumption mw&quot;).alias(&quot;min consumption mw&quot;),
+F.count(* quot;).alias(* quot;)
+)
+
+df hourly.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).saveAsTable(&quot;Lakehouse silver.silver.consumption hourly&quot;)
+print(e&quot;) Table silver.consumption hourly created: {df hourly.count()} lines&quot;)
+</code></pre>
+<p><a id="resultat-6"></a></p>
+<h3>Results</h3>
+<pre><code>Table silver.consumption hourly created: 4320 lines
+</code></pre>
+<p><a id="interpretation-6"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Key figures</strong> :<br />
+- <strong>Entry</strong> : 16,380 lines (15-min, cleaned)<br />
+- <strong>Sortie</strong> : 4,320 lines (scheduled, aggregated)<br />
+- <strong>Ratio</strong> 4 = 4,095 (vs 4,320 expected → 225 hours missing = partial data on certain days)</p>
+<p><strong>Formule</strong> (theoretical):<br />
+- 6 sites × 30 jours × 24 heures = 4 320 heures<br />
+- Reality: 4,320 (perfect!) = every hour covered</p>
+<p><strong>Columns created</strong> :</p>
+<table>
+<thead>
+<tr>
+<th>Colonne</th>
+<th>Formule</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hour</code></td>
+<td><code>date_trunc("hour", timestamp)</code></td>
+<td>Time stamping rounded to the hour (e.g. 08:45 → 08:00)</td>
+</tr>
+<tr>
+<td><code>avg_consumption_mw</code></td>
+<td><code>AVG(consumption_mw)</code></td>
+<td>Average of 4 measurements 15-min</td>
+</tr>
+<tr>
+<td><code>max_consumption_mw</code></td>
+<td><code>MAX(consumption_mw)</code></td>
+<td>Pic horaire (pic de consommation)</td>
+</tr>
+<tr>
+<td><code>min_consumption_mw</code></td>
+<td><code>MIN(consumption_mw)</code></td>
+<td>Creux horaire (minimum production)</td>
+</tr>
+<tr>
+<td><code>measurements</code></td>
+<td><code>COUNT(*)</code></td>
+<td>Number of points (4 = normal, &lt;4 = missing data)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exemple</strong> :<br />
+For SITE COM 001 on 2025-01-02 at 08:00:</p>
+<pre><code>Mesures 15-min : 0.34, 0.35, 0.33, 0.36 MW
+→ hour = 2025-01-02 08:00:00
+→ avg_consumption_mw = 0.345
+→ max_consumption_mw = 0.36
+→ min_consumption_mw = 0.33
+→ measurements = 4
+</code></pre>
+<p><strong>Benefit</strong> : this table is now <strong>canonique</strong> for hourly analysis, without duplicates, with aggregation statistics.</p>
+<hr />
+<p><a id="cellule-7-jointure-avec-les-prix-marche-consumptionwithprices"></a></p>
+<h2>Cell 7: Joint venture with market prices (consumption with prices)</h2>
+<p><a id="avant-dexecuter-7"></a></p>
+<h3>Before executing</h3>
+<p>Electricity consumption alone has no financial context. We enrich with the <strong>prix EPEX Spot</strong> (French infraday market), which varies per hour.</p>
+<p><strong>EPEX data</strong> (Bronze) :<br />
+- Granularity : hourly<br />
+- Colonnes : timestamp, price_eur_mwh, market (intraday/dayahead)</p>
+<p><strong>Why is it important?</strong><br />
+- <strong>Cost optimisation</strong> : identify the expensive hours to reduce consumption or move production<br />
+- <strong>Financial analysis</strong> : impact price × consumption = energy cost per hour<br />
+- <strong>Strategy</strong> : ML models on consumer-price relations</p>
+<p><strong>Approche</strong> :<br />
+- Load Bronze table <code>market_prices</code><br />
+- Trunc timestamp → hour (to match burn hourly)<br />
+- JOIN LEFT: Keep every hour, even without price</p>
+<p><strong>Attente</strong> : 4,320 lines (same as consumption hourly because all EPEX prices available)</p>
+<p><a id="code-7"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">from pyspark.sql import functions as F
+
+df conso = spark.table(&quot;Lakehouse silver.silver.consumption hourly&quot;)
+df prix = spark.sql(&quot;SELECT * FROM Lakehouse bronze.bronze.market prices&quot;)
+
+&lt;a id=&quot;convert-timestamp-en-hour-for-price&gt;/a&gt;
+# Convert timestamp to hour for price
+df prix = df prix.withColumn(&quot;hour&quot;, F.date trunc(&quot;hour&quot;, F.col(&quot;timestamp&quot;).cast(&quot;timestamp&quot;))
+
+&lt;a id=&quot;joint quot;&lt;/a&gt;
+# Joint
+df with prices = df conso.join(
+df prix.select(&quoth-quota,quota-quota),
+on=hour quot;
+how=&quot;left&quot;
+)
+
+df with prices.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).saveAsTable(&quot;Lakehouse silver.silver.consumption with prices&quot;)
+print(e&quot;) Table silver.consumption with prices created: {df with prices.count()} lines&quot;)
+df with prices.show(20)
+</code></pre>
+<p><a id="resultat-7"></a></p>
+<h3>Results</h3>
+<pre><code>Table silver.consumption with prices created: 4320 lines
+
++-------------------------------------------------------------------------------------------------------------------------------
+e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.: - Yeah.
++-------------------------------------------------------------------------------------------------------------------------------
+-2025-01-01 00:00:00 -SITE COM 001
+-2025-01-01 00:00:00 -SITE COM 002
+-2025-01-01 00:00:00 -SITE FLX 003 - 1.8765 - 1.9200 - 1.8400 - 4 - 45.5000 - intraday
+-2025-01-01 01:00:00 -SITE COM 001
+-2025-01-01 01:00:00 -SITE COM 002
+...
+-2025-01-31 23:00:00 -SITE PRD 006 - Yeah.
++-------------------------------------------------------------------------------------------------------------------------------
+</code></pre>
+<p><a id="interpretation-7"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Jointing technique</strong> :</p>
+<pre><code>df conso (4 320 lines)
+Promotional
+-hour, site id, avg consumption mw, ...
+Promotional
+JOIN LEFT
+Promotional
+Df prix
+- hour, price eur mwh, market
+</code></pre>
+<p>Result: all (hour, site id) preserved, enriched with prices if available.</p>
+<p><strong>Key figures</strong> :<br />
+- <strong>Conso</strong> : 4,320 lines (6 sites × 30j × 24h)<br />
+- <strong>Prix</strong> 48 lines (30 days × 24 hours = 720 hours, but 1 total price per hour)<br />
+- <strong>Result</strong> : 4,320 lines (each site inherits the price of its hour)</p>
+<p><strong>Price data</strong> (exemples) :<br />
+How's that?<br />
+|------|---|---|---|<br />
+2025-01-01 00:00<br />
+| 2025-01-01 01:00 | 48.25 | intraday | Nuit : petit pic |<br />
+| ... | ... | ... | |<br />
+2025-01-31 23:00</p>
+<p><strong>Benefit</strong> : this table now combines <strong>consumption AND financial context</strong>, ready for cost-benefit analysis.</p>
+<hr />
+<p><a id="cellule-8-verification-et-apercu-final-de-consumptionwithprices"></a></p>
+<h2>Cell 8: Verification and Final Overview of Consumption with prices</h2>
+<p><a id="avant-dexecuter-8"></a></p>
+<h3>Before executing</h3>
+<p>This cell checks that the table <code>consumption_with_prices</code> is well created and saved. No transformation, just a visual inspection.</p>
+<p><strong>Objective</strong> :<br />
+- Confirm 4,320 lines<br />
+- Show a sample (10 lines)<br />
+- Transition to advanced enrichment (next cell)</p>
+<p><a id="code-8"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">&lt;a id=&quot;la-table-silverconsumptionwithprices-exist-deja-creee-en-cellule-7&gt;&lt;/a&gt;
+# The silver.consumption with prices table already exists (created in cell 7)
+&lt;a id=&quot;-verify-just-what-the-quot;&lt;/a&gt;
+# We just make sure she's there.
+df = spark.table(&quot;Lakehouse silver.silver.consumption with prices&quot;)
+print(e&quot;) Table silver.consumption with prices saved: {df.count()} lines&quot;)
+print(&quot;\n
+df.show(10)
+Print(&quot;\n
+</code></pre>
+<p><a id="resultat-8"></a></p>
+<h3>Results</h3>
+<pre><code>Table silver.consumption with prices saved: 4320 lines
+
+Overview of cleaned data:
+
++-------------------------------------------------------------------------------------------------------------------------------
+e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.g.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.:  e.: - Yeah.
++-------------------------------------------------------------------------------------------------------------------------------
+-2025-01-01 00:00:00 -SITE COM 001
+-2025-01-01 00:00:00 -SITE COM 002
+-2025-01-01 00:00:00 -SITE FLX 003 - 1.8765 - 1.9200 - 1.8400 - 4 - 45.5000 - intraday
+-2025-01-01 - 00:00:00 -SITE PRD 006 - 3.2145 - 3.3200 - 3.1100 - 4 - 45.5000 - intraday
+-2025-01-01 01:00:00 -SITE COM 001
+-2025-01-01 01:00:00 -SITE COM 002
+-2025-01-01 - 01:00:00 -SITE FLX 003 - 1.7890 - 1.8200 - 1.7600 - 4 - 48.2500 - intraday
+SITE PRD 006
+-2025-01-01 02:00:00 -SITE COM 001
+02:00:00:00SITE COM 002
++-------------------------------------------------------------------------------------------------------------------------------
+
+Next step: Notebook 3 (PySpark - Advanced calculations)
+</code></pre>
+<p><a id="interpretation-8"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Table Status</strong> :<br />
+- <strong>4,320 lines</strong> (hour, site id)<br />
+- <strong>8 colonnes</strong> : hour, site_id, avg/max/min/measurements, price_eur_mwh, market<br />
+- <strong>Pas de NULL</strong> in price eur mwh: all EPEX prices covered for the period</p>
+<p><strong>Observations given</strong> :<br />
+1. <strong>Same price per hour</strong> : 2025-01-01 00:00 = 45.50 EUR/MWh for all sites<br />
+2. <strong>Variation par jour/heure</strong> : 00:00 (45.50) &lt; 01:00 (48.25) (normal : nuit creuse → petit pic)<br />
+3. <strong>Consommations</strong> :<br />
+   - SITE_COM_001 : ~0.34 MW (petite consommation, compatible "COM" = commercial/petit site)<br />
+   - SITE_COM_002 : ~2.12 MW (moyenne)<br />
+   - SITE_PRD_006 : ~3.21 MW (gros producteur)</p>
+<p><strong>Transition</strong> : this table is a <strong>stable entry point</strong> for advanced enrichment (cell 9).</p>
+<hr />
+<p><a id="cellule-9-enrichissement-avance-consumptionenriched-avec-baseline-z-score-featur"></a></p>
+<h2>Cell 9: Advanced enrichment (consumption enriched) with baseline, z-score, features ML</h2>
+<p><a id="avant-dexecuter-9"></a></p>
+<h3>Before executing</h3>
+<p>This is the most complex cell: we create <strong>12 derived columns</strong> to support analysis and ML models:</p>
+<ol>
+<li>
+<p><strong>Baseline 7 jours glissants</strong> (<code>baseline_7d_mw</code>)<br />
+   - Average consumption of the previous 7 days for each site<br />
+   - As a "normal" marker</p>
+</li>
+<li>
+<p><strong>Ratio vs baseline</strong> (<code>ratio_vs_baseline</code>)<br />
+   - Consommation actuelle ÷ baseline 7j<br />
+   - Detect deviations vs normal behaviour (e.g. ratio 1.5 = 50% above baseline)</p>
+</li>
+<li>
+<p><strong>Z-score</strong> (<code>z_score</code>)<br />
+   - Average deviation of the site in standard deviation units<br />
+   - Formule : (x - µ) / σ</p>
+</li>
+<li>
+<p><strong>Drapeau anomalies</strong> (<code>anomaly</code>)<br />
+   - ANOMALY (= very rare, &gt;99.7% probability under normality)<br />
+   - "✅ Normal" sinon</p>
+</li>
+<li>
+<p><strong>Features temporelles</strong> (<code>hour_of_day</code>, <code>day_of_week</code>, <code>is_weekend</code>)<br />
+   - Detect seasonal patterns (high midnight, peaks evening, different weekend)</p>
+</li>
+<li>
+<p><strong>Joint reference sites</strong> (<code>site_type</code>, <code>capacity_mw</code>, <code>flexible</code>, <code>baseline_mw</code>, <code>curtailment_price_eur_mwh</code>, <code>region</code>)<br />
+   - Adds business metadata</p>
+</li>
+<li>
+<p><strong>Weather joint</strong> (<code>temperature_c</code>, <code>wind_speed_ms</code>)<br />
+   - Real time in global time (not per site)<br />
+   - Explique variation consommation (chaud → AC, vent → moins de chauffage)</p>
+</li>
+<li>
+<p><strong>Flag maintenance</strong> (<code>in_maintenance</code>)<br />
+   - Placeholder for future filters</p>
+</li>
+<li>
+<p><strong>Lags for ML</strong> (<code>lag_24h</code>, <code>lag_168h</code>)<br />
+   - Consumption J-1 and J-7 (24h and 168h before)<br />
+   - Features for recursive models</p>
+</li>
+<li>
+<p><strong>Colonne prediction</strong> (placeholder)</p>
+<ul>
+<li>Will be filled in cell 10</li>
+</ul>
+</li>
+</ol>
+<p><strong>Key concepts</strong> :<br />
+- <strong>Window Functions</strong> : calculations on windows (e.g. 7d slippery per site)<br />
+- <strong>Derivation of features</strong> : turning raw data into intelligent signals</p>
+<p><a id="code-9"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">from pyspark.sql import functions as F
+from pyspark.sql import Window
+
+&lt;a id=&quot;1-load-base&quot;&lt;/a&gt;
+# - - - 1. Load base - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+df = spark.table(&quot;Lakehouse silver.silver.consumption with prices&quot;)
+
+&lt;a id=2-baseline-7-days-sliding&gt;/a&gt;
+# - - - 2. Baseline 7 slippery days - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+w7 = Window.partitionBy(&quot;site id&quot;) \
+.orderBy(F.col(&quoth))
+.rangeBetween(-7 * 24 * 3600, -1)
+
+df = df.withColumn(&quot;baseline 7d mw&quot;, F.avg(&quot;avg consumption mw&quot;).over(w7))
+
+&lt;a id=&quot;3-ratio-vs-baseline&quot;&gt;&lt;/a&gt;
+# - - - 3. Ratio vs baseline - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+df = df.withColumn(
+&quot;ratio vs baseline&quot;
+F.when(F.col(&quot;baseline 7d mw&quot;) &gt; 0,
+F.col(&quot;avg consumption mw&quot;) / F.col(&quot;baseline 7d mw&quot;)
+)otherwise(None)
+)
+
+&lt;a id=&quot;4-z-score-and-detection- anomalies&gt;&lt;/a&gt;
+# - - - 4. Z-score and detection anomalies - - - - - - - - - - - - - - - - - - - - - - - - - -
+w site = Window.partitionBy(&quot;site id&quot;)
+
+df = df.withColumn(&quot;mean site&quot;, F.avg(&quot;avg consumption mw&quot;).over(w site)) \
+.withColumn(&quot;std site&quot;, F.stddev(&quot;avg consumption mw&quot;).over(w site)) \
+.withColumn(&quot;z score&quot;
+F.when(F.col(&quottd site&quot;) &gt; 0,
+(F.col(&quot;avg consumption mw&quot;) - F.col(&quot;mean site&quot;)) / F.col(&quot;std site&quot;)
+)otherwise(0)
+) \
+.withColumn(&quot;anomaryquot;
+F.when(F.abs(F.col(&quot;z score&quot;)) &gt; 3, &quot;
+) \
+.drop(&quot;mean site&quot;, &quot site&quot;)
+
+5-features-temporal quot;
+# - - - 5. Time features - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+df = df.withColumn(&quot;hour of day&quot;, F.hour(&quoth)) \
+.withColumn(&quot;day of week&quot;, F.dayofweek(&quot;hour&quot;)) \
+.withColumn(&quot;is weekend&quot;, F.dayofweek(&quot;hour&quot;).isin(1, 7))
+
+&lt;a id=&quot;6-joint-referential-sites&gt;/a&gt;
+# - - - 6. Joint reference sites - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+df sites = spark.sql(&quot;SELECT * FROM Lakehouse bronze.bronze.sites reference&quot;)
+df = df.join(df sites, on=&quot;site id&quot;, how=&quot;left&quot;)
+
+7-joint-meteo-global-not-siteid&gt;/a&gt;
+# - - - 7. Weather joint (global, no site id) - - - - - - - - - - - - - - - - - -
+df weather = spark.sql(&quot;SELECT * FROM Lakehouse bronze.bronze.weather data&quot;) \
+.withColumn(&quot;hour w&quot;, F.date trunc(&quot;hour&quot;, F.col(&quot;timestamp&quot;))
+.select(&quot;hour w&quot;, quot;temperature c&quot;, quot;wind speed ms&quot;)
+
+df = df.join(df weather, df[&quot;hour&quot;]== df weather[&quot;hour w&quot;], how=&quot;left&quot;) \
+.drop(&quot;hour w&quot;)
+
+&lt;a id=&quot;8-flag-maintenance-table-absente-false-by-default;&gt;&lt;/a&gt;
+# - - - 8. Flag maintenance (absence table → Default False) - - - - - - - - - -
+df = df.withColumn(&quot;in maintenance&quot;, F.lit(False))
+
+&lt;a id=&quot;9-features-ml-lag-j-1-and-j-7&gt;&lt;/a&gt;
+# - - - 9. Features ML: lag J-1 and J-7 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+w lag = Window.partitionBy(&quot;site id&quot;).orderBy(&quot;hour quot;)
+
+df = df.withColumn(&quot;lag 24h&quot;, F.lag(&quot;avg consumption mw&quot;, 24).over(w lag)) \
+.withColumn(&quot;lag 168h&quot;, F.lag(&quot;avg consumption mw&quot;, 168).over(w lag))
+
+&lt;a id=&quot;10-column-prediction-placeholder&quot;&gt;&lt;/a&gt;
+# - - - 10. Prediction column (placeholder) - - - - - - - - - - - - - - - - - - - - -
+df = df.withColumn(&quot;prediction&quot; F.col(&quot;baseline 7d mw&quot;))
+
+(a) Saveguarded&gt;/a&gt;
+# - - - 11. Protection - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+df.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;) \
+.saveAsTable(&quot;Lakehouse silver.silver.consumption enriched&quot;)
+
+count = df.count()
+print(e&quot;) Table silver.consumption enriched created: {count} lines&quot;)
+df.printSchema()
+</code></pre>
+<p><a id="resultat-9"></a></p>
+<h3>Results</h3>
+<pre><code>Table silver.consumption enriched created: 4320 lines
+root
+--- hour: timestamp
+Site id: thong
+-- avg consumption mw: double
+-- max consumption mw: double
+- min consumption mw: double
+Measurements: long
+Double
+Market: thong
+Basic 7d mw: double
+-- ratio vs baseline: double
+Z score: double
+Anomaly: thong
+Integer
+Integer
+-- is weekend: boolean
+-- site type: thong
+capacit mw: double
+Flexible: boolean
+Basic mw: double
+Double
+Region: thong
+-- temperature c: double
+-- wind speed ms: double
+In maintenance: boolean
+Double
+Lag 168h: double
+--prediction: double
+</code></pre>
+<p><a id="interpretation-9"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Colonnes explicatives</strong> :</p>
+<p><a id="baseline-et-ratios"></a></p>
+<h4>Baseline and ratios</h4>
+<ul>
+<li><strong>baseline_7d_mw</strong> : moyenne glissante 7j/site</li>
+<li>Ex. SITE COM 001 : baseline 7d mw = 0.34 MW (normal behavior for this site)</li>
+<li>
+<p>Premier 7 jours : NULL (pas assez d'historique)</p>
+</li>
+<li>
+<p><strong>ratio_vs_baseline</strong> : ratio consommation vs baseline</p>
+</li>
+<li>Ex. 1.0 = conforming to baseline</li>
+<li>Ex. 1.5 = 50% above (suspected anomaly)</li>
+<li>Ex. 0.7 = 30% en-dessous (perte de charge possible)</li>
+</ul>
+<p><a id="detection-anomalies-z-score"></a></p>
+<h4>Detection anomalies (z-score)</h4>
+<ul>
+<li><strong>z_score</strong> : (x - µ) / σ</li>
+<li>μ = mean site on 30 days,</li>
+<li>Ex. z score = 0: value = mean</li>
+<li>Ex. z score = +2: value = mean + 2τ (rare, ~5%)</li>
+<li>
+<p>Ex. z score = +4: value = mean + 4τ (very rare, ~0.006%, clearly abnormal)</p>
+</li>
+<li>
+<p><strong>anomaly</strong> : drapeau</p>
+</li>
+<li>ANOMALY (standard threshold 3) = 99.7% under Gaussian hypothesis</li>
+<li>"✅ Normal" sinon</li>
+</ul>
+<p><strong>Exemple</strong> (hypothetic):</p>
+<pre><code>Site: SITE COM 001
+hour: 2025-01-15 14:00:00
+avg consumption mw: 0.5 MW
+mean site: 0.34 MW
+std site: 0.08 MW
+→ z score = (0.5 - 0.34) / 0.08 = 2.0 ✓
+→ anomaly = &quot; Normal quot;
+
+(But if avg consumption mw = 1.0 MW :)
+→ z score = (1.0 - 0.34) / 0.08 = 8.25
+→ anomaly = &quot;
+</code></pre>
+<p><a id="features-temporelles"></a></p>
+<h4>Features temporelles</h4>
+<ul>
+<li><strong>hour_of_day</strong> : 0–23 (heure locale)</li>
+<li>Detects peaks (7–9h, 17–19h) and hollow (minuit)</li>
+<li><strong>day_of_week</strong> : 1–7 (dimanche=1)</li>
+<li>Detect pattern weekend vs week</li>
+<li><strong>is_weekend</strong> : TRUE si samedi/dimanche</li>
+<li>Simplified segmentation residential consumption</li>
+</ul>
+<p><a id="metadonnees-sites-jointure-bronze"></a></p>
+<h4>Metadata sites (Joint Bronze)</h4>
+<ul>
+<li><strong>site_type</strong> : "COM" (commercial), "PRD" (production), "FLX" (flexible)</li>
+<li><strong>capacity_mw</strong> : max capacity (e.g. 5 MW)</li>
+<li><strong>flexible</strong> : TRUE if can modulate consumption (for optimization)</li>
+<li><strong>region</strong> : region France (ex. "Île-de-France")</li>
+</ul>
+<p><a id="meteo-jointure-globale"></a></p>
+<h4>Weather (global joint)</h4>
+<ul>
+<li><strong>temperature_c</strong> : average hourly outside time</li>
+<li>Correle with heating/air conditioning: heating consumption ↑ when T ▼</li>
+<li><strong>wind_speed_ms</strong> : vitesse vent</li>
+<li>Influence wind production (if site mix ENR)</li>
+</ul>
+<p><a id="lags-pour-ml"></a></p>
+<h4>Lags for ML</h4>
+<ul>
+<li><strong>lag_24h</strong> : same time (e.g. yesterday 2pm vs today 2pm)</li>
+<li>Capture patterns jour similaire</li>
+<li>
+<p>NULL for 1st day</p>
+</li>
+<li>
+<p><strong>lag_168h</strong> : consumption J-7 same time (e.g. last week 2pm)</p>
+</li>
+<li>Capture patterns semaine (lundi 14h similar chaque semaine)</li>
+<li>NULL for 1st 7 days</li>
+</ul>
+<p><strong>Final scheme</strong> :<br />
+- <strong>25 colonnes</strong> (input 8 + derived 17)<br />
+- <strong>4,320 lines</strong> (1 line = 1h for 1 site)<br />
+- <strong>Ready for ML models</strong> (features temporelles, lags, ratios, signaux statiques)</p>
+<p><strong>Benefit</strong> : this table <strong>consolidates the whole business context</strong> (baselines, anomalies, weather, ML features) in a single analytical source.</p>
+<hr />
+<p><a id="cellule-10-modele-de-prediction-consumptionpredictions"></a></p>
+<h2>Cell 10: Prediction model (consumption predictions)</h2>
+<p><a id="avant-dexecuter-10"></a></p>
+<h3>Before executing</h3>
+<p>We create a <strong>simple but effective predictive model</strong> by combining three signals via weighted average:</p>
+<p><strong>Formule</strong> :</p>
+<pre><code>prediction = baseline_7d × 0.5 + lag_24h × 0.3 + lag_168h × 0.2
+</code></pre>
+<p><strong>Weight justified</strong> :<br />
+- <strong>0.5 (baseline 7j)</strong> : the most stable signal, represents average trend<br />
+- <strong>0.3 (lag 24h)</strong> : adjusted for daily deviations (weather, events)<br />
+- <strong>0.2 (lag 168h)</strong> : capture patterns saisonniers (lundi vs dimanche)</p>
+<p><strong>Error prediction</strong> :<br />
+- <code>prediction_error_mw</code> Real consumption - prediction<br />
+- <code>prediction_error_pct</code> : error as a percentage of actual consumption</p>
+<p><strong>Attente</strong> : 4,320 lines with prediction errors ~5–10% (good level for simple model).</p>
+<p><a id="code-10"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">from pyspark.sql import functions as F
+from pyspark.sql import Window
+
+df = spark.table(&quot;Lakehouse silver.silver.consumption enriched&quot;)
+
+&lt;a id=&quot;fenetre-by-site-ordered-per-hour&gt;/a&gt;
+# Window by site ordered per hour
+w lag = Window.partitionBy(&quot;site id&quot;).orderBy(&quot;hour quot;)
+
+&lt;a id=&quot;prediction-mean-pondere-baseline-7j-lag-24h-lag-168h&gt;&lt;/a&gt;
+# Prediction = baseline weighted mean 7j + 24h lag + 168h lag
+df pred = df.withColumn(&quot;lag 24h&quot;, F.lag(&quot;avg consumption mw&quot;, 24).over(w lag)) \
+.withColumn(&quot;lag 168h&quot;, F.lag(&quot;avg consumption mw&quot;, 168).over(w lag)) \
+.withColumn(
+Prediction quot;
+F.when(
+F.col(&quot;lag 24h&quot;).isNotNull() &amp; F.col(&quot;lag 168h&quot;).isNotNull(),
+F.round(
+F.col(&quot;baseline 7d mw&quot;) * 0.5 +
+F.col(&quot;lag 24h&quot;) * 0.3 +
+F.col(&quot;lag 168h&quot;) * 0.2,
+4
+)
+.otherwise(F.col(&quot;baseline 7d mw&quot;)) # fallback if not enough history
+) \
+.withColumn(
+•prediction error mw&quot;
+F.round(F.abs(F.col(&quot;avg consumption mw&quot;) - F.col(&quot;prediction&quot;)), 4)
+) \
+.withColumn(
+,
+F.when(
+F.col(&quot;avg consumption mw&quot;)
+F.round(F.col(&quot;prediction error mw&quot;) / F.col(&quot;avg consumption mw&quot;) * 100, 2)
+)otherwise(None)
+)
+
+o o o o o o o o o o o o o o o o o o
+# Selection of columns useful for table predictions
+df pred final = df pred.select(
+,
+&quot; avg consumption mw&quot;
+Prediction quot;
+•prediction error mw&quot;
+,
+,
+&quot;lag 168h&quot;
+)
+
+df pred final.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;) \
+.saveAsTable(&quot;Lakehouse silver.silver.consumption predictions&quot;)
+
+print(e&quot;) silver.consumption predictions created: {df pred final.count():,} lines&quot;)
+df pred final.show(5)
+</code></pre>
+<p><a id="resultat-10"></a></p>
+<h3>Results</h3>
+<pre><code>的 silver.consumption predictions created: 4,320 lines
+
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-2025-01-03 04:00:00 -SITE COM 001 - 0.3423 - 0.3423 - 0.0000 - 0.00 - null - null
+-2025-01-09 04:00:00 -SITE COM 001
+-2025-01-10 04:00:00 -SITE COM 001 - 0.3445 - 0.3418 - 0.0027 - 0.78 - 0.3412 - 0.3423 -
+-2025-01-15 04:00:00 -SITE COM 001 - 0.3501 - 0.3425 - 0.0076 - 2.17 - 0.3445 - 0.341 -
+-2025-01-22 04:00:00 -SITE COM 001 - 0.3567 - 0.3432 - 0.0135 - 3.79 - 0.3501 - 0.3445
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+</code></pre>
+<p><a id="interpretation-10"></a></p>
+<h3>Interpretation</h3>
+<p><strong>Technique</strong> :</p>
+<p>Recalculation of lags (redundant with rich but clear insulation):<br />
+- <code>F.lag(..., 24)</code> 24 hours (D-1, same time)<br />
+- <code>F.lag(..., 168)</code> : shift 168 hours (J-7, same time)<br />
+- Result: NULL the first 7 days (not enough history)</p>
+<p>Calculation prediction:</p>
+<pre><code class="language-python">F.when(
+    lag_24h NOT NULL AND lag_168h NOT NULL,
+    round(baseline_7d × 0.5 + lag_24h × 0.3 + lag_168h × 0.2, 4)
+).otherwise(
+    baseline_7d  # Fallback si historique insuffisant
+)
+</code></pre>
+<p>Error calculation:<br />
+- <code>prediction error mw =</code> (en MW)<br />
+- <code>prediction_error_pct = (erreur_mw / consommation) × 100</code> (en %)</p>
+<p><strong>Exemple</strong> (line 2):</p>
+<pre><code>hour: 2025-01-09 04:00:00
+avg consumption mw: 0.3412 MW (actual)
+lag 24h (J-1): 0.3423 MW
+lag 168h (J-7): 0.3421 MW
+baseline 7d: 0.3420 MW (estimated to be enriched)
+
+→ prediction = 0.3420 × 0.5 + 0.3423 × 0.3 + 0.3421 × 0.2
+= 0.171 + 0.1269 + 0.06842
+= 0.3421 MW
+
+→ prediction error mw =
+→ prediction error pct = (0.0009 / 0.3412) × 100 = 0.26%
+</code></pre>
+<p><strong>Observed errors</strong> :<br />
+<br />
+|-------|------|---|---|---|<br />
+| 1 | J-7 | — | — | Pas assez d'historique (lag NULL) |<br />
+| 2 | J+6 | 0.0009 | 0.26% | Excellent ! |<br />
+* * Very good *<br />
+| 4 | J+12 | 0.0076 | 2.17% | Bon |<br />
+| 5 | J+19 | 0.0135 | 3.79% | Acceptable |</p>
+<p><strong>Tendance</strong> : error increases slightly at the end of the month (degradation model vs reality = normal behavior after 20j without adjustment).</p>
+<p><strong>Synthetic metal</strong> :<br />
+- Average error: ~2–3% (excellent simple prediction level)<br />
+- Max observed: ~10% (acceptable for anticipation)<br />
+- Distribution: close to zero (correct centring)</p>
+<p><strong>Benefit</strong> : this table is <strong>the transition layer</strong> to Gold (advanced models, financial optimization, real-time dashboards).</p>
+<hr />
+<p><a id="synthese-de-latelier-silver"></a></p>
+<h2>Summary of the Silver Workshop</h2>
+<p><a id="pipeline-complet-de-nettoyage-et-enrichissement"></a></p>
+<h3>Complete cleaning and enrichment pipeline</h3>
+<pre><code>Promotional │ BRONZE (18 144 lines, raw, 15-min) │
+Promotional - Doublons, NULL, outside, heterogeneous dates │
+
+Promotional
+- - - - - - - - - - - - - - - - - - - -
+Promotional │ Cell 2: DISTINCT │
+Promotional ✓ Splitting (-864 lines) │
+Promotional │ → Dedup (17 280 lines) │
+
+Promotional
+- - - - - - - - - - - - - - - - - - - -
+Promotional │ Cell 3: FILTER │
+Promotional ✓ Cleaning (-900 lines) │
+Promotional │ → Clean (16,380 lines) │
+
+Promotional
+- - - - - - - - - - - - - - - - - - - -
+Promotional │ Cell 5: COALESCE │
+Promotional ✓ Standardization dates │
+Promotional │ → Dates fixed (16 380 lines) │
+
+Promotional
+- - - - - - - - - - - - - - - - - - - -
+Promotional │ Cell 6: GROUP BY │
+Promotional ✓ Aggregation 15min → 1h (÷4) │
+Promotional │ → Hourly (4 320 lines) │
+
+Promotional
+- - - - - - - - - - - - - - - - - - - -
+Promotional │ Cell 7 : JOIN (LEFT) │
+Promotional ✓ + Price EPEX │
+Promotional │ → With prices (4 320 lines) │
+
+Promotional
+
+Promotional │ Cell 9 : WINDOW FUNCTIONS │
+Promotional ✓ Baseline 7d, z-score, anomalies │
+Promotional ✓ Weather, lagoons J-1/J-7, features ML │
+Promotional │ → Enriched (4 320 lines, 25 collar) │
+
+Promotional
+
+8) Cell 10: Promotional PREDICTIVE MODEL │
+Promotional ✓ Weighted average 3 signals │
+Promotional ✓ Error prediction (2–3% average) │
+Promotional │ → Predictions (4 320 lines) │
+
+Promotional
+
+Promotional │ SILVER : 7 TABLES CREATED │
+Promotional - consumption dedup (17 280) │
+Promotional - clean consumption (16,380) │
+Promotional - consumption dates fixed (16,380) │
+Promotional - consumption hourly (4 320) │
+Promotional - consumption with prices (4 320) │
+Promotional - consumption enriched (4 320, 25 columns, ready for ML) │
+Promotional - consumption predictions (4 320, predictive model) │
+
+Promotional
+v
+- - - - - - - - - - - - - - - - - - - - - - - - - -
+Promotional │ GOLD (Workshop 3 &amp; 4) │
+Promotional │ - Advanced analysis │
+Promotional │ - Dashboards real time │
+Promotional │ - Financial optimization │
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+</code></pre>
+<p><a id="tables-creees-et-validation"></a></p>
+<h3>Tables created and validation </h3>
+<table>
+<thead>
+<tr>
+<th>Table </th>
+<th>Lines</th>
+<th>Colonnes</th>
+<th></th>
+<th> lens. </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>consumption_dedup</strong></td>
+<td>17 280</td>
+<td>6</td>
+<td>Suppression doublons</td>
+<td>hour, site_id</td>
+</tr>
+<tr>
+<td><strong>consumption_clean</strong></td>
+<td>16 380</td>
+<td>6</td>
+<td>Filtrage valeurs invalides</td>
+<td>hour, site_id</td>
+</tr>
+<tr>
+<td><strong>consumption_dates_fixed</strong></td>
+<td>16 380</td>
+<td>6</td>
+<td>Normalisation timestamps</td>
+<td>hour, site_id</td>
+</tr>
+<tr>
+<td><strong>consumption_hourly</strong></td>
+<td>4 320</td>
+<td>8</td>
+<td> keys. Aggregation 15min → 1h </td>
+<td>hour, site_id</td>
+</tr>
+<tr>
+<td><strong>consumption_with_prices</strong></td>
+<td>4 320</td>
+<td>10</td>
+<td>Enrichissement prix EPEX</td>
+<td>hour, site_id</td>
+</tr>
+<tr>
+<td><strong>consumption_enriched</strong></td>
+<td>4 320</td>
+<td>25</td>
+<td>Baseline, anomalies, weather, features ML </td>
+<td>hour, site_id</td>
+</tr>
+<tr>
+<td><strong>consumption_predictions</strong></td>
+<td>4 320</td>
+<td>8</td>
+<td>Simple predictive model </td>
+<td>hour, site_id</td>
+</tr>
+</tbody>
+</table>
+<p><a id="concepts-cles-maitrises"></a></p>
+<h3>Mastered key concepts </h3>
+<ol>
+<li><strong>DISTINCT</strong> : suppression doublons (Cellule 2)</li>
+<li><strong>FILTER / WHERE</strong> (Cell 3) </li>
+<li><strong>COALESCE</strong> : heterogeneous format management (Cell 5) </li>
+<li><strong>GROUP BY + AGG</strong> Aggregation and statistical calculations (Cell 6) </li>
+<li><strong>JOIN LEFT</strong> : enrichissement sans perte (Cellule 7)</li>
+<li><strong>Window Functions</strong> : calculs glissants, lags, statistiques par groupe (Cellule 9)</li>
+<li><strong>Derivation of features </strong> : z-score, ratios, lags, flags temporels (Cellule 9–10)</li>
+<li><strong>Simple models </strong> : Weighted average for prediction (Cell 10) </li>
+</ol>
+<p><a id="points-dattention"></a></p>
+<h3>Attention points</h3>
+<ul>
+<li><strong></strong> : <code>lag_24h</code> and  <code>lag_168h</code> are NULL for the first 7 days (inadequate history) </li>
+<li><strong>Fallback</strong> : prediction uses baseline if insufficient historical </li>
+<li><strong>Jointures</strong> : used in LEFT to avoid losing data (consumption without price → preserved) </li>
+<li><strong>Idempotence</strong> : reexecutable code (OVERWRITE, IF NOT EXISTS) </li>
+</ul>
+<p><a id="prochaines-etapes-gold"></a></p>
+<h3>Next Steps (Gold) </h3>
+<ol>
+<li>
+<p><strong>Workshop 3 </strong> : Advanced calculations (Python/PySpark) <br />
+   - Models ML (regression, clustering) <br />
+   - Static analyses (distribution, correlations) </p>
+</li>
+<li>
+<p><strong>Workshop 4 </strong> : Dashboards and optimization <br />
+   - Visualisations Fabric/Power BI<br />
+   - Financial optimization (peak shearing, curtailing) <br />
+   - Real-time alerts </p>
+</li>
+</ol>
+<p><a id="qualite-donnees-silver"></a></p>
+<h3>Data quality Silver </h3>
+<ul>
+<li><strong>Compltitude</strong> : 4,320 lines = 100% of expected hours (6 sites × 30j × 24h) </li>
+<li><strong>Validity </strong> : no NULL (or explicit and expected), no </li>
+<li><strong> tools. Coherence </strong> : standard timestamps, correct aggregations </li>
+<li><strong>Richesse</strong> : 25 columns (input + derivatives) ready for analysis </li>
+<li><strong>Traceability </strong> : Each table materializes a stage of the </li>
+</ul>
+<hr />
+<p><strong> pipeline. End of the Silver workshop. </strong></p>
+<p>You have cleaned, standardized and enriched raw IoT data into a reliable Silver layer, compliant with Medallion Architecture. The 7 tables created now support advanced analyses, ML models, and professional optimisation in Gold layer. </p>
+<p>Congratulations!</p></main>
+</body>
+</html>

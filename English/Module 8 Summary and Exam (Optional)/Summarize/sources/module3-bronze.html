@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notebooks Workshop – Bronze Layer</title>
+  <link rel="stylesheet" href="../assets/source.css">
+</head>
+<body>
+  <header class="src-header">
+    <a href="../index.html" class="back-link">&#8592; Back to presentation</a>
+    <h1 class="src-title">Notebooks Workshop – Bronze Layer</h1>
+  </header>
+  <main class="src-content"><p><a id="atelier-1-couche-bronze-ingestion-des-donnees-brutes"></a></p>
+<h1>WORKSHOP 1 : BRONZE CUT — GROSS DATA INSTITUTION</h1>
+<p><strong>Lakehouse</strong> : <code>Lakehouse_bronze</code><br />
+<strong>Notebook</strong> : <code>NB_01_Bronze</code><br />
+<strong>Objective</strong> : Manage raw data without transformation (source of truth)</p>
+<hr />
+<p><a id="objectif-de-latelier"></a></p>
+<h2>The objective of the workshop</h2>
+<p>The Bronze layer of a Medallion Architecture represents the foundation of your data infrastructure. It receives raw data directly from source systems, without any transformation, cleaning or business logic. The aim of this first workshop is to load five CSV files from a fleet of six power production and consumption sites in France, converting them into persistent Delta tables within a Microsoft Fabric lakehouse.</p>
+<p>Why this approach? The Bronze layer acts like a <strong>source of unchangeable truth</strong>. It preserves the data exactly as it comes from IoT sensors, SCADA systems and operational databases, including with their defects (null values, error codes, heteroclite formats). This traceability is essential for audit, debugging and regulatory compliance. It is only in Silver layer that you will apply business transformations and cleaning.</p>
+<p>At the end of this workshop, you will have created five Bronze tables, performed an initial quality diagnosis, and identified the anomalies that will be treated downstream. You will also have a solid basis to understand the Medallion architecture and its progress raw data → cleaned data → business data.</p>
+<p><a id="contexte-metier"></a></p>
+<h2>Business context</h2>
+<p>Your organisation operates a network of six electricity production and consumption sites in France. Two industrial sites (capacity 5 MW and 3.5 MW), two commercial sites (2 MW and 1.5 MW) and two residential sites (0.8 MW and 0.6 MW). Each site is equipped with IoT sensors that transmit electricity consumption every 15 minutes for 30 days. Additional data come from several sources: EPEX market spot prices, weather conditions, site reference data and maintenance events.</p>
+<p>The problem: these raw data arrive in various formats (incoherent timestamps, missing or invalid numerical values represented by error codes like -888 or -999), with duplicates and uneven quality depending on the source. Before using this data for analysis or machine learning, it is necessary first to centralize it, preserve its integrity, and document anomalies. That's exactly the role of the Bronze Layer.</p>
+<hr />
+<p><a id="prerequis-mise-en-place-de-lenvironnement"></a></p>
+<h2>Prerequisites: Environmental implementation</h2>
+<p><a id="1-creer-le-workspace"></a></p>
+<h3>1. Create Workspace</h3>
+<p>In Microsoft Fabric, access the welcome, click on <strong>+ New</strong> and select <strong>Espace de travail</strong>. Name him <code>ws_medallion_electricity</code> or similar. Once created, you will have a container for your lakehouse and notebooks.</p>
+<p><a id="2-creer-le-lakehouse-bronze"></a></p>
+<h3>2. Create Lakehouse Bronze</h3>
+<p>Inside the workspace, click on <strong>+ New</strong> → <strong>Lakehouse</strong>. Name him <code>Lakehouse_bronze</code>. Fabric automatically creates a Delta Lake structure with directories <code>Tables</code> and <code>Files</code>. It is in this lakehouse that you will build your Bronze diaper.</p>
+<p><a id="3-charger-les-fichiers-source"></a></p>
+<h3>3. Load source files</h3>
+<p>Before running the notebook, you must place the five CSV files in the directory <code>Files</code> Lakehouse. Through the Fabric interface, access the lakehouse, open the explorer <strong>Files</strong>, create a subfolder <code>data_bronze_notebooks</code>, and upload the following files:</p>
+<table>
+<thead>
+<tr>
+<th>File name</th>
+<th>Lines</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>consumption_raw.csv</code></td>
+<td>18 144</td>
+<td>Electricity consumption data (15 min) for 6 sites over 30 days. Columns: timestamp, site id, consumption mw, status. Anomalies: multiple timestamp formats, null values, error codes (−888, -999, -777), duplicates.</td>
+</tr>
+<tr>
+<td><code>market_prices.csv</code></td>
+<td>2 880</td>
+<td>EPEX spot price every 15 minutes over 30 days. Columns: timestamp, price eur mwh. Reliable source, few anomalies.</td>
+</tr>
+<tr>
+<td><code>weather_data.csv</code></td>
+<td>720</td>
+<td>Hourly weather data (30 days × 24 hours). Columns: timestamp, temperature c, humidity pct, wind kmh, cloud coverage. Aggregation of a weather API.</td>
+</tr>
+<tr>
+<td><code>sites_reference.csv</code></td>
+<td>6</td>
+<td>Baseline data for the six sites. Columns: site id, site type, capacity mw, flexible, baseline mw, curtailment price eur mwh, region. Static data, very few anomalies.</td>
+</tr>
+<tr>
+<td><code>maintenance_events.csv</code></td>
+<td>8</td>
+<td>Maintenance events (planned or unexpected stops). Columns: event id, site id, start date, end date, event type, reason. Very reliable data.</td>
+</tr>
+</tbody>
+</table>
+<p><a id="4-creer-et-configurer-le-notebook"></a></p>
+<h3>4. Create and configure the notebook</h3>
+<p>In the lakehouse <code>Lakehouse_bronze</code>create a new PySpark notebook and name it <code>NB_01_Bronze</code>. You will execute the seven cells described below. Make sure the notebook is attached to the lakehouse (it must appear in the notebook title bar).</p>
+<hr />
+<p><a id="cellule-1-configuration-spark-et-creation-du-schema-bronze"></a></p>
+<h2>Cell 1: Spark Configuration and Bronze Schema Creation</h2>
+<p><a id="avant-dexecuter"></a></p>
+<h3>Before executing</h3>
+<p>This cell initializes your work environment. You check that the Spark session is available (manufacture automatically injects a Spark instance for each notebook), you confirm its version (essential for API compatibility), and you create the schema <code>bronze</code> which will serve as a container to all your raw tables. A schema in Delta Lake is a logical grouping of tables, comparable to a traditional SQL database. The command <code>CREATE SCHEMA IF NOT EXISTS</code> guarantees the ideal: if the schema already exists, no error is lifted.</p>
+<p><a id="code"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">&lt;a id=&quot;verifier-que-spark-is-available&gt;&lt;/a&gt;
+# Check that Spark is available
+print(e&quot;) Spark version: {spark.version}&quot;)
+
+&lt;a id=&quot;create-le-schema-bronze-sil-nexist-not-yet-gt;&lt;/a&gt;
+# Create the bronze schema if it doesn't exist yet
+Spark.sql(&quot;CREATE SCHEMA IF NOT EXISTS bronze quot;)
+print(&quot;)
+
+&lt;a id=&quot;confirm the active-lakehouse&gt;&lt;/a&gt;
+# Confirm active lakehouse
+df schemas = spark.sql(&quot;SHOW SCHEMAS&quot;).toPandas()
+print(e&quot;) Available diagrams: {list(df schemas.iloc[:,0]}&quot;)
+</code></pre>
+<p><a id="resultat"></a></p>
+<h3>Results</h3>
+<pre><code>Spark version: 3.5.5.5.4.20251218.3
+
+Available diagrams: ['bronze', 'default', 'dbo']
+</code></pre>
+<p><a id="interpretation"></a></p>
+<h3>Interpretation</h3>
+<p>Spark 3.5.x is the stable version for Fabric and will support all Delta formats used in this workshop. The scheme <code>bronze</code> was created successfully and appears in the list of available schemes. You will also see the presence of diagrams <code>default</code> and <code>dbo</code>, which are automatically created by Fabric and which you can ignore for this project. Your workspace is now configured to receive the five raw tables.</p>
+<hr />
+<p><a id="cellule-2-import-consumptionrawcsv-table-delta"></a></p>
+<h2>Cell 2: Import consumption raw.csv → Delta Table</h2>
+<p><a id="avant-dexecuter-1"></a></p>
+<h3>Before executing</h3>
+<p>Load the first source file, <code>consumption_raw.csv</code>, which contains electricity consumption data captured every 15 minutes. PySpark offers API <code>spark.read.format("csv")</code> ideal for loading CSV. Options <code>header=true</code> and <code>inferSchema=true</code> instruct Spark to treat the first line as a header and automatically deduce column types (timestamp, integer, string, etc.). After reading DataFrame, you write data in Delta format (format optimized for data lakehouse) in the schema <code>bronze</code>. Fashion <code>overwrite</code> crush any existing table with the same name, ensuring a complete reset at each run.</p>
+<p>Line counting (<code>count()</code>) is a critical step: in data engineering, it is systematically checked that the number of lines loaded corresponds to the waiting. A major divergence would indicate a reading or truncation problem.</p>
+<p><a id="code-1"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">&lt;a id=&quot;load it-csv-with-pyspark&quot;&gt;&lt;/a&gt;
+# Load CSV with PySpark
+df consumption = spark.read.format(&quot;csv&quot;) \
+Option(&quot;header&quot;,quot;)
+.option('inferSchema&quot;')
+.load(&quot;Files/data bronze notebooks/consumption raw.csv&quot;)
+
+&lt;a id=&quot;count-lines-before-criterion&gt;&lt;/a&gt;
+# Count lines before writing
+nb lines = df consumption.count()
+
+&lt;a id=&quot;creer-la-table-in-le-schema-bronze-quot;&gt;&lt;/a&gt;
+# Create the table in the bronze scheme
+df consumption.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).saveAsTable(&quot;bronze.consumption raw&quot;)
+
+print(e&quot;) Table bronze.consumption raw created: {nb lines} lines&quot;)
+</code></pre>
+<p><a id="resultat-1"></a></p>
+<h3>Results</h3>
+<pre><code>Table bronze.consumption raw created: 18144 lines
+</code></pre>
+<p><a id="interpretation-1"></a></p>
+<h3>Interpretation</h3>
+<p>The 18 144 loaded lines correspond exactly to the waiting: 6 sites × 4 measurements per hour × 24 hours × 30 days = 17,280 theoretical lines, plus duplicates and recalibration records that explain the surplus. The file was read in full and converted to Delta format. The table <code>bronze.consumption_raw</code> is now accessible in SQL and persists in the lakehouse, forming the source of truth for all downstream treatments. Note that the Bronze layer does not know the structure or quality of the data; It stores them as they are.</p>
+<hr />
+<p><a id="cellule-3-premiere-vue-des-donnees-brutes"></a></p>
+<h2>Cell 3: First view of raw data</h2>
+<p><a id="avant-dexecuter-2"></a></p>
+<h3>Before executing</h3>
+<p>A visual inspection of the data is always the next step. You run a simple SQL query <code>SELECT * LIMIT 20</code> to observe the first 20 lines and familiarize yourself with the format, columns, and visible anomalies. This exploration helps to understand what you actually handle before building complex queries. You will discover variations in timestamp format (ISO 8601 vs. English vs. American), missing values (NULL), error codes represented by negative numbers such as -888 or -999 (conventions to indicate sensor failure or non-availability).</p>
+<p><a id="code-2"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-sql">%%sql
+SELECT * FROM bronze.consumption_raw LIMIT 20
+</code></pre>
+<p><a id="resultat-2"></a></p>
+<h3>Results</h3>
+<table>
+<thead>
+<tr>
+<th>timestamp</th>
+<th>site_id</th>
+<th>consumption_mw</th>
+<th>status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2025-12-01T00:15:00Z</td>
+<td>SITE_001</td>
+<td>2.34</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T00:30:00Z</td>
+<td>SITE_001</td>
+<td>2.41</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T00:45:00Z</td>
+<td>SITE_001</td>
+<td>-888</td>
+<td>ERROR</td>
+</tr>
+<tr>
+<td>2025-12-01T01:00:00Z</td>
+<td>SITE_001</td>
+<td>2.39</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T01:15:00Z</td>
+<td>SITE_002</td>
+<td>0.95</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T01:30:00Z</td>
+<td>SITE_002</td>
+<td>NULL</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T01:45:00Z</td>
+<td>SITE_002</td>
+<td>0.91</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01/12/01 00:15</td>
+<td>SITE_003</td>
+<td>4.67</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01 00:30:00</td>
+<td>SITE_003</td>
+<td>4.72</td>
+<td>ERROR</td>
+</tr>
+<tr>
+<td>2025-12-01 00:45:00</td>
+<td>SITE_003</td>
+<td>4.61</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>01/12/2025 01:00</td>
+<td>SITE_004</td>
+<td>1.88</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>01/12/2025 01:15</td>
+<td>SITE_004</td>
+<td>-999</td>
+<td>ERROR</td>
+</tr>
+<tr>
+<td>2025-12-01T01:30:00Z</td>
+<td>SITE_005</td>
+<td>3.42</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T01:45:00Z</td>
+<td>SITE_005</td>
+<td>3.51</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T02:00:00Z</td>
+<td>SITE_006</td>
+<td>0.67</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T02:15:00Z</td>
+<td>SITE_006</td>
+<td>0.70</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T02:30:00Z</td>
+<td>SITE_001</td>
+<td>-777</td>
+<td>ERROR</td>
+</tr>
+<tr>
+<td>2025-12-01T02:45:00Z</td>
+<td>SITE_001</td>
+<td>2.45</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T03:00:00Z</td>
+<td>SITE_002</td>
+<td>0.89</td>
+<td>OK</td>
+</tr>
+<tr>
+<td>2025-12-01T03:15:00Z</td>
+<td>SITE_003</td>
+<td>4.58</td>
+<td>OK</td>
+</tr>
+</tbody>
+</table>
+<p><a id="interpretation-2"></a></p>
+<h3>Interpretation</h3>
+<p>This inspection immediately reveals several defects in the raw data. The timestamps are not consistent: some in ISO 8601 (2025-12-01T00:15:00Z), others in French (01/12/2025 01:15), others in mixed format (2025-12-01/12/01 00:15). This lack of typical standardization of heterogeneous systems complicates subsequent jointing and aggregation.</p>
+<p>Negative values (-888, -999, -777) do not represent physical consumption; These are error or unavailability codes of the sensor. NULL values also appear, confirming missing data even when the status indicates OK. This inconsistency (NULL with OK status) will be documented and corrected in Silver.</p>
+<p>Positive values (2.34, 0.95, 4.67 MW) are consistent with reported site capacity (between 0.6 and 5 MW). However, some values appear unusually high or low, potentially outside trades.</p>
+<p>This view confirms that the Bronze layer has preserved the raw reality of the source data, including anomalies. </p>
+<hr />
+<p><a id="cellule-4-diagnostic-qualite-de-consumptionraw"></a></p>
+<h2>Cell 4: Consumption raw quality diagnostic</h2>
+<p><a id="avant-dexecuter-3"></a></p>
+<h3>Before executing</h3>
+<p>You now perform a statistical diagnosis of the table <code>consumption_raw</code>. This aggregate SQL query has several quality dimensions: the total number of rows, the number of unique combinations (timestamp, site id) to detect duplicates, null values (total absence), negative values (error codes), and outliers (consumption &gt; 10 MW, abnormally high). These metrics form the quality line base for the Bronze layer and will serve as a benchmark to assess the impact of Silver cleaning.</p>
+<p><a id="code-3"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-sql">%%sql
+-- Count NULL, error codes, duplicates
+SELECT
+CUNT(*) as total rows,
+CUNT(DISTINCT timestamp, site id) as unique rows,
+CUNT(*) - CUNT(DISTINCT timestamp, site id) as duplicates,
+SUM(CASE WHEN consumption mw IS NULL THEN 1 ELSE 0 END) as null values,
+SUM(CASE WHEN consumption mw &lt; 0 THEN 1 ELSE 0 END) as error codes,
+SUM(CASE WHEN consumption mw &gt; 10 THEN 1 ELSE 0 END) as external
+From bronze.consumption raw
+</code></pre>
+<p><a id="resultat-3"></a></p>
+<h3>Results</h3>
+<table>
+<thead>
+<tr>
+<th>total_rows</th>
+<th>unique_rows</th>
+<th>duplicates</th>
+<th>null_values</th>
+<th>error_codes</th>
+<th>outliers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>18144</td>
+<td>17280</td>
+<td>864</td>
+<td>554</td>
+<td>319</td>
+<td>27</td>
+</tr>
+</tbody>
+</table>
+<p><a id="interpretation-3"></a></p>
+<h3>Interpretation</h3>
+<p>This diagnosis quantifies anomalies and guides cleaning priorities. Total of 18,144 lines, but only 17,280 unique combinations (timestamp, site id), revealing <strong>864 doublons</strong> (4.8 per cent of data). Typically, these duplicates come from retransmissions following network timeouts or sensor recalibration. They must be deduplicated in Silver, keeping the most recent or reliable line depending on the business context.</p>
+<p><strong>554 valeurs NULL</strong> (3%) for <code>consumption_mw</code> are sensor failures or undocumented maintenance periods. In Silver, you will choose to filter or charge them (linear interpolation, average site value).</p>
+<p><strong>319 error codes</strong> (1.8%): negative values codifying failure states (-888 = sensor defect, -999 = network failure, -777 = calibration in progress). These codes must be identified, mapped to business categories, then filtered or treated specifically according to the application logic.</p>
+<p><strong>27 outliers</strong> (0.15%) with consumption &gt; 10 MW exceed the theoretical maximum capacity of any site (5 MW). These anomalies justify an investigation: error of magnitude, poorly applied multiplier, or exceptional business event (external electricity import). To be examined in detail during the Silver.</p>
+<p>These figures provide a solid diagnosis: approximately 6-7 per cent of the data show identified anomalies. This is a very reasonable rate for raw IoT data in production.</p>
+<hr />
+<p><a id="cellule-5-import-des-quatre-autres-fichiers"></a></p>
+<h2>Cell 5: Import the other four files</h2>
+<p><a id="avant-dexecuter-4"></a></p>
+<h3>Before executing</h3>
+<p>You repeat the loading operation for the four additional files. Each follows the same pattern: CSV reading with schema inference, Delta writing in overwrite mode. These files are simpler than <code>consumption_raw</code> (less expected anomalies) as they come from more controlled sources (site reference data, market prices, maintenance events, public API weather data). Nevertheless, you treat them with the same Bronze protocol: raw ingestion, without transformation. This ensures consistency and traceability.</p>
+<p><a id="code-4"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">&lt;a id=&quot;market-prices&lt;/a&gt;
+# Market prices
+Spark.read.csv(&quot;Files/data bronze notebooks/market prices.csv&quot;, header=True, inferSchema=True) \
+.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).SaveAsTable(&quot;bronze.market prices&quot;)
+
+&lt;a id=&quot;weather&quot;&gt;&lt;/a&gt;
+# Weather
+Spark.read.csv(&quot;Files/data bronze notebooks/weather data.csv&quot;, header=True, inferSchema=True) \
+.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).saveAsTable(&quot;bronze.weather data&quot;)
+
+&lt;a id=&quot;sites-reference&quot;&lt;/a&gt;
+# Reference sites
+spark.read.csv(&quot;Files/data bronze notebooks/sites reference.csv&quot;, header=True, inferSchema=True) \
+.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).saveAsTable(&quot;bronze.sites reference&quot;)
+
+(a) Maintenance-events quot;
+# Maintenance events
+spark.read.csv(&quot;Files/data bronze notebooks/maintenance events.csv&quot;, header=True, inferSchema=True) \
+.write.mode(&quot;overwrite&quot;).format(&quot;delta&quot;).saveAsTable(&quot;bronze.maintenance events&quot;)
+
+print(&quot;) All Bronze tables created
+</code></pre>
+<p><a id="resultat-4"></a></p>
+<h3>Results</h3>
+<pre><code>All Bronze tables created
+</code></pre>
+<p><a id="interpretation-4"></a></p>
+<h3>Interpretation</h3>
+<p>Four additional tables now enrich the Bronze Lakehouse. These files were all read and stored in Delta format. No loading errors: access paths are correct, files exist, and CSV schemas are interpretable.</p>
+<p><strong><code>bronze.market_prices</code></strong> : 30 day EPEX spot price with 15 min granularity. Used to analyse the correlation between consumption and electricity prices, crucial for the economic optimization of flexible sites.</p>
+<p><strong><code>bronze.weather_data</code></strong> : Weather conditions (temperature, humidity, wind, cloud cover) with hourly granularity. Source for understanding the impact of climate conditions on consumption (e.g., air conditioning load at peak temperatures).</p>
+<p><strong><code>bronze.sites_reference</code></strong> : Master data of the six sites (type, capacity, region, flexibility, price of erasure). Table small (6 lines) but very important: decoding key of site identifiers and source of business information on each facility.</p>
+<p><strong><code>bronze.maintenance_events</code></strong> : Planned or unforeseen maintenance events (8 records). Allows to exclude or annotate maintenance periods during analysis (so as not to attribute a fall in consumption to a change in behaviour if the site was under revision).</p>
+<hr />
+<p><a id="cellule-6-verification-et-recapitulatif-de-toutes-les-tables"></a></p>
+<h2>Cell 6: Verification and summary of all tables</h2>
+<p><a id="avant-dexecuter-5"></a></p>
+<h3>Before executing</h3>
+<p>You now consolidate an overview of all Bronze tables by counting the number of rows for each table. This synthesis check ensures that complete ingestion has been successful and that there are no surprises (partial files, late reading errors, etc.). A UNION ALL request aggregates the count of five tables into one reference output.</p>
+<p><a id="code-5"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-sql">%%sql
+SELECT 'consumption' as table_name, COUNT(*) as rows FROM bronze.consumption_raw
+UNION ALL
+SELECT 'prices', COUNT(*) FROM bronze.market_prices
+UNION ALL
+SELECT 'weather', COUNT(*) FROM bronze.weather_data
+UNION ALL
+SELECT 'sites', COUNT(*) FROM bronze.sites_reference
+UNION ALL
+SELECT 'maintenance', COUNT(*) FROM bronze.maintenance_events
+</code></pre>
+<p><a id="resultat-5"></a></p>
+<h3>Results</h3>
+<table>
+<thead>
+<tr>
+<th>table_name</th>
+<th>rows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>consumption</td>
+<td>18144</td>
+</tr>
+<tr>
+<td>prices</td>
+<td>2880</td>
+</tr>
+<tr>
+<td>weather</td>
+<td>720</td>
+</tr>
+<tr>
+<td>sites</td>
+<td>6</td>
+</tr>
+<tr>
+<td>maintenance</td>
+<td>8</td>
+</tr>
+</tbody>
+</table>
+<p><a id="interpretation-5"></a></p>
+<h3>Interpretation</h3>
+<p>All tables are present and contain the expected number of rows, validating complete ingestion.</p>
+<p><strong>consumption (18 144)</strong> : Main table, volumetric. Includes 6 sites × ~3 024 measurements per site (4 measurements/h × 24 h × 30 days + duplicates). Source of raw truth for energy analysis.</p>
+<p><strong>prices (2 880)</strong> : Exactly 30 days × 24 hours × 4 measurements/hour (no duplicates, reliable source). Time dimension aligned with consumption.</p>
+<p><strong>weather (720)</strong> 30 days × 24 hours. Hourly granularity, so grouping necessary to reach data 15 min consumption in Silver (1 hour = 4 measurements of 15 min).</p>
+<p><strong>sites (6)</strong> : Six facilities. Table of very small size, but critical for enriching analyses with professional metadata (type of site, capacity, region, flexibility).</p>
+<p><strong>maintenance (8)</strong> : Eight maintenance events over 30 days. To be used in Silver to filter or annotate consumption data during stops.</p>
+<p>This assessment confirms that Bronze ingestion is <strong>complete and reliable</strong>. The Bronze layer is now operational, forming the immutable foundation of your given pipeline.</p>
+<hr />
+<p><a id="cellule-7-generation-dun-rapport-qualite-synthetique"></a></p>
+<h2>Cell 7: Generation of a synthetic quality ratio</h2>
+<p><a id="avant-dexecuter-6"></a></p>
+<h3>Before executing</h3>
+<p>As a data engineering practitioner, you complete your Bronze work with a report documenting identified anomalies and recommended actions for the Silver layer. This report synthesizes previous diagnoses and guides the Silver team on priority transformations. Good Bronze quality documentation allows consumers of data (analysts, data scientists) to understand the assumptions and limitations of the data they use.</p>
+<p><a id="code-6"></a></p>
+<h3>💻 Code</h3>
+<pre><code class="language-python">bronze ratio = f&quot; & quot;
+
+QUALITY REPORT BRONZE
+的 Pipeline Medallion - Electricity
+
+
+SUMMARY OF THE INGESTION
+
+5 files successfully ingested
+5 Delta tables created in the 'bronze' scheme
+• 21,758 total line stored (consumption + metadata)
+
+TABLES
+
+• bronze.consumption raw: 18,144 lines (IoT data)
+• bronze.market prices: 2,880 lines (EPEX spot price)
+• bronze.weather data: 720 lines (weather conditions)
+• bronze.sites reference: 6 lines (master sites data)
+• bronze.maintenance events: 8 lines (maintenance events)
+
+ANOMALIES DETECTED IN bronze.consumption raw
+
+
+DUTY: 864 lines (4.8%)
+- Probable cause: network retransmissions, sensor recalibration
+
+
+NULL VALUE: 554 lines (3.0 %)
+- Probable cause: Sensor failure, network failure
+- Silver Action: Filter or impute (linear interpolation)
+
+ERROR CODES: 319 lines (1.8%)
+-888 (sensor failure), -999 (network failure), -777 (calibration)
+- Action Silver: Mapper to business categories, then filter
+
+OUTLOOK: 27 lines (0.15%)
+- Consumption &gt; 10 MW (exceeding theoretical maximum capacity 5 MW)
+Silver Action: Detailed investigation, rejection or correction of magnitude
+
+HETEROGENE TIMESTAMP FORMS: 3+ formats detected
+- ISO 8601 (2025-12-01T00:15:00Z)
+- French (01/12/2025 01:15)
+- Mixed (2025-12-01/12/01 00:15)
+Action Silver: Standardize ISO 8601, validate consistency
+
+Overall quality
+
+Lines without anomaly identified: 16,280 / 18,144 = 89.7%
+Lines with at least one anomaly: 1,864 / 18,144 = 10.3%
+
+EVALUATION: Acceptable rate for IoT data in wholesale production.
+Silver cleaning targeted on 10% of data.
+
+SILVER PRIORITIES
+
+Standardize timestamps (ISO 8601, time zone)
+2
+3
+4
+5
+6 Enrich with site reference, weather, maintenance data
+
+TRUTH SOURCE: Immutable
+
+All raw files kept entirely in Bronze.
+No transformation applied. Audit trail maintained.
+
+
+Report generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S') }
+&quot; & quot;
+
+print(Bronze report)
+</code></pre>
+<p><a id="resultat-6"></a></p>
+<h3>Results</h3>
+<pre><code>QUALITY REPORT BRONZE
+的 Pipeline Medallion - Electricity
+
+
+SUMMARY OF THE INGESTION
+
+5 files successfully ingested
+5 Delta tables created in the 'bronze' scheme
+• 21,758 total line stored (consumption + metadata)
+
+TABLES
+
+• bronze.consumption raw: 18,144 lines (IoT data)
+• bronze.market prices: 2,880 lines (EPEX spot price)
+• bronze.weather data: 720 lines (weather conditions)
+• bronze.sites reference: 6 lines (master sites data)
+• bronze.maintenance events: 8 lines (maintenance events)
+
+ANOMALIES DETECTED IN bronze.consumption raw
+
+
+DUTY: 864 lines (4.8%)
+- Probable cause: network retransmissions, sensor recalibration
+
+
+NULL VALUE: 554 lines (3.0 %)
+- Probable cause: Sensor failure, network failure
+- Silver Action: Filter or impute (linear interpolation)
+
+ERROR CODES: 319 lines (1.8%)
+-888 (sensor failure), -999 (network failure), -777 (calibration)
+- Action Silver: Mapper to business categories, then filter
+
+OUTLOOK: 27 lines (0.15%)
+- Consumption &gt; 10 MW (exceeding theoretical maximum capacity 5 MW)
+Silver Action: Detailed investigation, rejection or correction of magnitude
+
+HETEROGENE TIMESTAMP FORMS: 3+ formats detected
+- ISO 8601 (2025-12-01T00:15:00Z)
+- French (01/12/2025 01:15)
+- Mixed (2025-12-01/12/01 00:15)
+Action Silver: Standardize ISO 8601, validate consistency
+
+Overall quality
+
+Lines without anomaly identified: 16,280 / 18,144 = 89.7%
+Lines with at least one anomaly: 1,864 / 18,144 = 10.3%
+
+EVALUATION: Acceptable rate for IoT data in wholesale production.
+Silver cleaning targeted on 10% of data.
+
+SILVER PRIORITIES
+
+Standardize timestamps (ISO 8601, time zone)
+2
+3
+4
+5
+6 Enrich with site reference, weather, maintenance data
+
+TRUTH SOURCE: Immutable
+
+All raw files kept entirely in Bronze.
+No transformation applied. Audit trail maintained.
+
+
+Report generated : 2026-04-06 14:32:17
+</code></pre>
+<p><a id="interpretation-6"></a></p>
+<h3>Interpretation</h3>
+<p>This report summarizes all of your Bronze work. The five tables contain 21,758 complete and verified ingestion lines. The quality rate of 89.7% of lines without anomaly detected is <strong>very good for raw IoT data</strong> This rate, combined with clear documentation of the remaining 10.3%, allows downstream teams (Silver, Gold) to make informed decisions.</p>
+<p>The six Silver priorities structure the future work. Instead of using an imprecise database labelled "data in production", you now have a detailed analysis that guides the cleaning effort. This is the strength of the Bronze layer: tracing the real state of the data and preserving its integrity while documenCanting defects for after-treatment targeted.</p>
+<hr />
+<p><a id="synthese-de-latelier-bronze"></a></p>
+<h2>Summary of the Bronze Workshop</h2>
+<p><a id="objectifs-realises"></a></p>
+<h3>Objectives achieved</h3>
+<p>You successfully conducted the complete ingestion of raw data for your electricity generation site fleet. Five CSV files (18.144 + 2.880 + 720 + 6 + 8 = 21.758 lines) were loaded in Delta format within the lakehouse <code>Lakehouse_bronze</code>, in a dedicated scheme <code>bronze</code>. No transformations were applied: all anomalies (heterogeneous timestamp formats, null values, error codes, duplicates, outliers) were preserved, documented and quantified.</p>
+<p><a id="points-cles-techniques"></a></p>
+<h3>Technical key points</h3>
+<p><strong>Architecture Delta Lake</strong> : You used the Delta format, the Parquet evolution for the data lakehouse. Delta offers ACID guarantees (Atomicity, Coherence, Isolation, Durability), versioning, and performance optimization. <code>SaveAsTable()</code> data persists in Fabric managed table.</p>
+<p><strong>Idempotence</strong> : Orders <code>CREATE SCHEMA IF NOT EXISTS</code> and mode <code>overwrite</code> ensure that re-executing the notebook does not create errors or duplicates. This is essential in production.</p>
+<p><strong>Spark API</strong> : You have combined the PySpark API (reading CSV, count, write) and SQL (SELECT, CUNT DISTINCT, CASE WHEN aggregations). Both models coexist in Fabric; choose according to readability and performance.</p>
+<p><a id="points-cles-metier"></a></p>
+<h3>Business Key Points</h3>
+<p><strong>Six operational sites</strong> : Heterogeneous park (2 industrial 5-3.5 MW, 2 commercial 2-1.5 MW, 2 residential 0.8-0.6 MW) captured with granularity 15 min over 30 days.</p>
+<p><strong>Dimensions enrichies</strong> : Consumption data enriched by spot prices (EPEX, 2,880 measurements), weather (720 hourly measurements), site references (6 masters), maintenance (8 events). These dimensions will allow multi-criteria analysis (consumption-temperature correlation, maintenance impact, price optimization).</p>
+<p><strong>10,3 % d'anomalies</strong> : Acceptable but targeted rate. Duplicates (4.8%), NULL (3%), error codes (1.8%) and external (0.15) require differential treatment according to application logic (filtering vs. imputation vs. investigation).</p>
+<p><a id="points-cles-pour-silver"></a></p>
+<h3>Key points for Silver</h3>
+<p>The Silver layer will apply business transformations based on this Bronze diagnosis. The priorities framed by your report (timestamps normalization, deduplication, error code mapping, null management, external validation, enrichment) will guide the Silver Notebook and avoid ineffective adhoc analysis.</p>
+<p>Bronze layer remains <strong>immutable</strong> : you will always keep the original intact, allowing full audit and replay of treatments if a Silver logic proves to be wrong.</p>
+<p><a id="transition-vers-latelier-silver"></a></p>
+<h3>Transition to Silver Workshop</h3>
+<p>Silver Notebook (<code>NB_02_Silver</code>) will read these five tables <code>bronze.*</code> input and produce clean tables in a new schema <code>silver</code>, normalizing timestamps, eliminating anomalies and applying business logic (detection of anomalies, aggregation, enrichment) by preserving traceability to raw lines.</p>
+<p>You now have a robust and documented foundation to advance in the Medallion Architecture.</p></main>
+</body>
+</html>

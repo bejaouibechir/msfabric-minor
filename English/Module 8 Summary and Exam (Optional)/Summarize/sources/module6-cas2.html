@@ -1,0 +1,3316 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eventstream – Lakehouse & Warehouse Security</title>
+  <link rel="stylesheet" href="../assets/source.css">
+</head>
+<body>
+  <header class="src-header">
+    <a href="../index.html" class="back-link">&#8592; Back to presentation</a>
+    <h1 class="src-title">Eventstream – Lakehouse & Warehouse Security</h1>
+  </header>
+  <main class="src-content"><p><a id="atelier-securisation-microsoft-fabric-roles-workspace-permissions-ditem-limites-"></a></p>
+<h1>Workshop: Microsoft Fabric Security - Workspace roles, item permissions, Lakehouse limits and full implementation with Warehouse</h1>
+<p>You will build a security workshop <strong>Microsoft Fabric</strong> en deux temps :</p>
+<ol>
+<li>a <strong>mise en contexte Lakehouse</strong>, only to show:</li>
+</ol>
+<ul>
+<li>roles <strong>Admin / Member / Contributor / Viewer</strong></li>
+<li>impact of item permissions via <strong>Manage permissions</strong></li>
+<li>
+<p>the limits of <strong>Lakehouse</strong> for demonstrations <strong>T-SQL</strong> granulaires<br />
+2. one <strong>mise en contexte Warehouse</strong>, which takes over the functional logic of securing but with a more suitable engine for advanced SQL demonstrations:</p>
+</li>
+<li>
+<p>diagrams <code>bronze</code>, <code>silver</code>, <code>gold</code>, <code>security</code></p>
+</li>
+<li>permissions SQL fines</li>
+<li><strong>RLS</strong></li>
+<li><strong>CLS</strong></li>
+<li><strong>OLS</strong></li>
+<li>tests utilisateurs reproductibles</li>
+</ul>
+<p>The pedagogical accounts used in the workshop are:</p>
+<ul>
+<li><code>participant@contactemeraudeit.onmicrosoft.com</code> : small business user</li>
+<li><code>test@contactemeraudeit.onmicrosoft.com</code> : second utilisateur de test</li>
+</ul>
+<p>The account <code>dev@contactemeraudeit.onmicrosoft.com</code> is mentioned only as <strong>formator administration account</strong> to perform manipulations that require a high level of law.</p>
+<p>Expected outcome: at the end of the workshop, learners include:</p>
+<ul>
+<li>why workspace roles alone are not enough</li>
+<li>how to apply item permissions in Fabric</li>
+<li>Why <strong>Lakehouse</strong> shows practical limitations for some scenarios <strong>T-SQL</strong></li>
+<li>Why <strong>Warehouse</strong> is more relevant for a full SQL security demonstration in Fabric</li>
+</ul>
+<hr />
+<p><a id="prerequis"></a></p>
+<h2>Prerequisite</h2>
+<ul>
+<li>One in favour <strong>Microsoft Fabric</strong> actif</li>
+<li>Fabric capacity compatible with <strong>Lakehouse</strong> and <strong>Warehouse</strong></li>
+<li>The accounts <code>participant@contactemeraudeit.onmicrosoft.com</code> and <code>test@contactemeraudeit.onmicrosoft.com</code></li>
+<li>A trainer administrator account to execute manipulations requiring high fees</li>
+<li>The possibility to open several browser sessions or private windows</li>
+</ul>
+<p><a id="references-officielles-utiles"></a></p>
+<h2>Useful official references</h2>
+<ul>
+<li><strong>Workspace roles in Fabric</strong> : <a href="https://learn.microsoft.com/fabric/fundamentals/roles-workspaces">https://learn.microsoft.com/fabric/fundamentals/roles-workspaces</a></li>
+<li><strong>Share items and manage permissions</strong> : <a href="https://learn.microsoft.com/fabric/fundamentals/share-items">https://learn.microsoft.com/fabric/fundamentals/share-items</a></li>
+<li><strong>What is Fabric Data Warehouse?</strong> : <a href="https://learn.microsoft.com/en-us/fabric/data-warehouse/data-warehousing">https://learn.microsoft.com/en-us/fabric/data-warehouse/data-warehousing</a></li>
+<li><strong>Secure your Fabric Data Warehouse</strong> : <a href="https://learn.microsoft.com/fabric/data-warehouse/security">https://learn.microsoft.com/fabric/data-warehouse/security</a></li>
+<li><strong>SQL granular permissions in Microsoft Fabric</strong> : <a href="https://learn.microsoft.com/en-us/fabric/data-warehouse/sql-granular-permissions">https://learn.microsoft.com/en-us/fabric/data-warehouse/sql-granular-permissions</a></li>
+<li><strong>Row-level security in Fabric Data Warehousing</strong> : <a href="https://learn.microsoft.com/en-us/fabric/data-warehouse/row-level-security">https://learn.microsoft.com/en-us/fabric/data-warehouse/row-level-security</a></li>
+<li><strong>Column-level security in Fabric Data Warehousing</strong> : <a href="https://learn.microsoft.com/is-is/fabric/data-warehouse/column-level-security">https://learn.microsoft.com/is-is/fabric/data-warehouse/column-level-security</a></li>
+</ul>
+<hr />
+<p><a id="partie-1-montrer-les-roles-workspace-et-les-permissions-ditem-dans-un-lakehouse"></a></p>
+<h2>Part 1 - Show Workspace roles and item permissions in a Lakehouse</h2>
+<p><a id="11-creer-le-workspace-wssec1"></a></p>
+<h3>1.1 - Create the workspace <code>WS_SEC_1</code></h3>
+<ol>
+<li>Ouvrir <strong>app.fabric.microsoft.com</strong></li>
+<li>Check that you are connected with <code>dev@contactemeraudeit.onmicrosoft.com</code></li>
+<li>In the left sidebar, click on <strong>Workspaces</strong></li>
+<li>Click on <strong>+ New workspace</strong></li>
+<li>In the field <strong>Name</strong>, saisir <code>WS_SEC_1</code></li>
+<li>If a field <strong>Description</strong> is available, enter <code>Security lab for lakehouse and warehouse comparison</code></li>
+<li>Check the displayed capacity</li>
+<li>Click on <strong>Apply</strong></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Champ</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Name</strong></td>
+<td><code>WS_SEC_1</code></td>
+</tr>
+<tr>
+<td><strong>Description</strong></td>
+<td><code>Security lab for lakehouse and warehouse comparison</code></td>
+</tr>
+<tr>
+<td><strong>Creation account</strong></td>
+<td><code>dev@contactemeraudeit.onmicrosoft.com</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>Workspace <code>WS_SEC_1</code></li>
+<li>The button <strong>+ New item</strong></li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : the laboratory workspace is ready.</p>
+</blockquote>
+<p><a id="12-ajouter-participant-et-test-comme-viewers"></a></p>
+<h3>1.2 - Add <code>participant</code> and <code>test</code> like Viewers</h3>
+<ol>
+<li>In <code>WS_SEC_1</code>click on <strong>Workspace settings</strong></li>
+<li>Ouvrir <strong>Manage access</strong></li>
+<li>Click on <strong>Add people or groups</strong></li>
+<li>Add <code>participant@contactemeraudeit.onmicrosoft.com</code></li>
+<li>Give him the role <strong>Viewer</strong></li>
+<li>Add <code>test@contactemeraudeit.onmicrosoft.com</code></li>
+<li>Give him the role <strong>Viewer</strong></li>
+<li>Click on <strong>Add</strong></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Initial role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dev@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>participant@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Admin</td>
+</tr>
+<tr>
+<td><code>test@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Viewer</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>The three accounts visible in <strong>Manage access</strong></li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> The basic hierarchy of Workspace roles is in place.</p>
+</blockquote>
+<p><a id="13-creer-un-lakehouse-de-demonstration-pour-la-partie-permissions-ditem"></a></p>
+<h3>1.3 - Create a Lakehouse demo for the item permissions part</h3>
+<ol>
+<li>Return to workspace <code>WS_SEC_1</code></li>
+<li>Click on <strong>+ New item</strong></li>
+<li>Rechercher <strong>Lakehouse</strong></li>
+<li>Select <strong>Lakehouse</strong></li>
+<li>Nommer l'item <code>RetailCorpLakehouseDemo</code></li>
+<li>Click on <strong>Create</strong></li>
+<li>Wait for Lakehouse to open</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Champ</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Lakehouse name</strong></td>
+<td><code>RetailCorpLakehouseDemo</code></td>
+</tr>
+<tr>
+<td><strong>Usage</strong></td>
+<td>Demonstration roles + item permissions</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>Lakehouse named <code>RetailCorpLakehouseDemo</code></li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : the Lakehouse demonstration support item is ready.</p>
+</blockquote>
+<p><a id="14-creer-un-notebook-pour-generer-les-tables-de-test-du-lakehouse"></a></p>
+<h3>1.4 - Create a Notebook to generate Lakehouse test tables</h3>
+<ol>
+<li>Return to workspace <code>WS_SEC_1</code></li>
+<li>Click on <strong>+ New item</strong></li>
+<li>Rechercher <strong>Notebook</strong></li>
+<li>Select <strong>Notebook</strong></li>
+<li>Name Notebook <code>RetailCorpLakehouseDemoSetup</code></li>
+<li>Click on <strong>Add lakehouse</strong></li>
+<li>Attacher <code>RetailCorpLakehouseDemo</code></li>
+<li>In the first cell, paste next script</li>
+</ol>
+<pre><code class="language-python">from pyspark.sql import types as T
+
+orders_data = [
+    (1, &quot;Nord&quot;, &quot;Laptop&quot;, 1490.00, &quot;bronze&quot;),
+    (2, &quot;Sud&quot;, &quot;Phone&quot;, 719.00, &quot;bronze&quot;),
+    (3, &quot;Nord&quot;, &quot;Monitor&quot;, 229.00, &quot;gold&quot;),
+    (4, &quot;Sud&quot;, &quot;Mouse&quot;, 29.00, &quot;gold&quot;)
+]
+
+orders_schema = T.StructType([
+    T.StructField(&quot;OrderId&quot;, T.IntegerType(), False),
+    T.StructField(&quot;Region&quot;, T.StringType(), False),
+    T.StructField(&quot;ProductName&quot;, T.StringType(), False),
+    T.StructField(&quot;Amount&quot;, T.DoubleType(), False),
+    T.StructField(&quot;Layer&quot;, T.StringType(), False)
+])
+
+df = spark.createDataFrame(orders_data, orders_schema)
+
+(
+    df.filter(&quot;Layer = 'bronze'&quot;)
+      .drop(&quot;Layer&quot;)
+      .write.mode(&quot;overwrite&quot;)
+      .format(&quot;delta&quot;)
+      .saveAsTable(&quot;bronze_sales_demo&quot;)
+)
+
+(
+    df.filter(&quot;Layer = 'gold'&quot;)
+      .drop(&quot;Layer&quot;)
+      .write.mode(&quot;overwrite&quot;)
+      .format(&quot;delta&quot;)
+      .saveAsTable(&quot;gold_sales_demo&quot;)
+)
+
+print(&quot;Lakehouse demo tables created successfully.&quot;)
+</code></pre>
+<ol start="9">
+<li>Click on <strong>Run</strong></li>
+<li>Waiting for the end of execution</li>
+<li>Go back to Lakehouse</li>
+<li>Click on <strong>Refresh</strong></li>
+<li>Check for tables <code>bronze_sales_demo</code> and <code>gold_sales_demo</code></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Notebook name</strong></td>
+<td><code>RetailCorpLakehouseDemoSetup</code></td>
+</tr>
+<tr>
+<td><strong>Lakehouse attached</strong></td>
+<td><code>RetailCorpLakehouseDemo</code></td>
+</tr>
+<tr>
+<td><strong>Tables created</strong></td>
+<td><code>bronze_sales_demo</code>, <code>gold_sales_demo</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>An error-free notebook</li>
+<li>Message <code>Lakehouse demo tables created successfully.</code></li>
+<li>Two tables visible in Lakehouse</li>
+</ul>
+<p><a id="15-montrer-le-menu-contextuel-et-manage-permissions"></a></p>
+<h3>1.5. - Show context menu and <code>Manage permissions</code></h3>
+<ol>
+<li>Back to workspace items list</li>
+<li>Localiser <code>RetailCorpLakehouseDemo</code></li>
+<li>Click on the context menu <strong>...</strong> de l'item</li>
+<li>Show learners the menu options</li>
+<li>Click on <strong>Manage permissions</strong></li>
+</ol>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>The context menu of the item</li>
+<li>The entrance <strong>Manage permissions</strong></li>
+<li>Notebook <code>RetailCorpLakehouseDemoSetup</code></li>
+<li>The tables <code>bronze_sales_demo</code> and <code>gold_sales_demo</code> already created to support the demonstration</li>
+</ul>
+<p><a id="16-presenter-brievement-les-permissions-ditem"></a></p>
+<h3>1.6 - Briefly present the permissions of item</h3>
+<p>When you open <strong>Manage permissions</strong>Fabric can display several fine rights depending on the type of item and the condition of your possessor. It is not necessary to enter into all the details too early, but it is very useful to give a simple reading.</p>
+<table>
+<thead>
+<tr>
+<th>Permission</th>
+<th>Simple pedagogical explanation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Read</code></td>
+<td>Can open and consult the item</td>
+</tr>
+<tr>
+<td><code>Write</code></td>
+<td>Peut modifier l'item</td>
+</tr>
+<tr>
+<td><code>Reshare</code></td>
+<td>Can share the item with other people</td>
+</tr>
+<tr>
+<td><code>Execute</code></td>
+<td>Can run an executable item</td>
+</tr>
+<tr>
+<td><code>ReadAll</code></td>
+<td>Can read all the data or contents exposed by the item according to its type</td>
+</tr>
+<tr>
+<td><code>ViewOutput</code></td>
+<td>Can view outputs produced</td>
+</tr>
+<tr>
+<td><code>ViewLogs</code></td>
+<td>Can view execution logs</td>
+</tr>
+<tr>
+<td><code>SubscribeOneLakeEvents</code></td>
+<td>Can subscribe to OneLake events related to the item if the scenario allows</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>In <strong>Manage permissions</strong>, Identify visible permissions in your environment</li>
+<li><strong>Read</strong> ne veut pas dire automatiquement <strong>modifier</strong></li>
+<li><strong>Write</strong> ne veut pas dire automatiquement <strong>repartager</strong></li>
+</ol>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>A list of permissions more fine than just a workspace role</li>
+<li>A clear separation between reading, modification, sharing and execution</li>
+</ul>
+<p><a id="17-echequier-combinaison-roles-workspace-permissions-ditem-sur-lakehouse"></a></p>
+<h3>1.7 - <strong>SAMPLE</strong> : Combination Roles Workspace × Item Permissions on Lakehouse</h3>
+<p>This section is one of the most important of the workshop. The Workspace role and the item permissions are not two independent systems: they <strong>s'influencent mutuellement</strong>, and the observed result is not always intuitive. The tests below were performed in real-life conditions on an active Fabric holding.</p>
+<blockquote>
+<p>⚠️ <strong>Attention</strong> : the actual behavior may differ from what one would logically expect. This is precisely the educational interest of this chessboard.</p>
+</blockquote>
+<p><a id="matrice-des-observations-reelles-lakehouse"></a></p>
+<h4>Real Observations Matrix (Lakehouse)</h4>
+<table>
+<thead>
+<tr>
+<th>Workspace role</th>
+<th>Permissions granted (Lakehouse + Notebook)</th>
+<th>Bouton Run Notebook</th>
+<th>SQL Analytics Endpoint Access</th>
+<th>Lakehouse Interface Access</th>
+<th>Overall level observed</th>
+<th>Educational commentary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Viewer</strong></td>
+<td><code>Read</code> + <code>ViewOutput</code></td>
+<td>❌</td>
+<td>✅</td>
+<td>Limited</td>
+<td>SQL Play Only</td>
+<td>Very restrictive — tables inaccessible without <code>ReadAll</code></td>
+</tr>
+<tr>
+<td><strong>Viewer</strong></td>
+<td><code>Read</code> + <code>ViewOutput</code> + <code>ReadAll</code> + <code>Execute</code> / Notebook : <code>Read</code> + <code>Edit</code> + <code>Run</code></td>
+<td>❌ <em>(or very late)</em></td>
+<td>✅</td>
+<td>Limited</td>
+<td>SQL playback OK, Run blocked</td>
+<td><strong>Even with all the rights item + Notebook, the Viewer role blocks Run</strong></td>
+</tr>
+<tr>
+<td><strong>Contributor</strong></td>
+<td><code>Read</code> + <code>Write</code> + <code>Reshare</code> + <code>Execute</code> + <code>ReadAll</code> + <code>ViewOutput</code> / Notebook : tous droits</td>
+<td>✅ <em>(after latency)</em></td>
+<td>✅</td>
+<td>✅</td>
+<td>Good balance</td>
+<td>The most stable role for demos — to be given priority in training</td>
+</tr>
+<tr>
+<td><strong>Member</strong></td>
+<td><code>Read</code> + <code>Write</code> + <code>Reshare</code> + <code>Execute</code> + <code>ReadAll</code> + <code>ViewOutput</code> / Notebook : tous droits</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅ <em>(plus visible)</em></td>
+<td>Inattendu / Instable</td>
+<td><strong>Loss of Run ET SQL despite higher rights than a Contributor</strong></td>
+</tr>
+<tr>
+<td><strong>Admin</strong></td>
+<td>All rights inherited</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅ <em>(create / delete)</em></td>
+<td>Total access</td>
+<td>Comportement normal d'administrateur</td>
+</tr>
+</tbody>
+</table>
+<p><a id="les-regles-a-memoriser"></a></p>
+<h4>The rules to memorize</h4>
+<p><strong>1 — Workspace is the dominant factor.</strong><br />
+Even with <code>ReadAll</code>, <code>Execute</code>, <code>Run</code> and <code>Edit</code> at item level, the role <code>Viewer</code> prevents Run from being executed. The item permissions cannot outclass the limit imposed by the role. </p>
+<p><strong>2 — Changing roles can reset granular permissions. </strong><br />
+Switch a user from  <code>Viewer</code> to  <code>Contributor</code> or  <code>Member</code> can overwrite already configured item permissions. Revalidate systematically after each change of role. </p>
+<p><strong>3 — <code>ReadAll</code> + <code>Execute</code> focus on SQL Analytics Endpoint. </strong><br />
+These permissions improve SQL access but do not guarantee the execution of Notebooks. Spark and SQL plans have separate authorisation mechanisms. </p>
+<p><strong>4 — The  <code>Member</code>  behavior. is counter-intuitive. </strong><br />
+<code>Member</code> appears to be higher than  <code>Contributor</code>, but tests show a loss of Run and SQL Endpoint, while the Lakehouse interface is paradoxically becoming more visible. To be presented as a real feature of Fabric, not as a bug. </p>
+<p><strong>5 — <code>Contributor</code> is the role to recommend in training context. </strong><br />
+Better balance between Notebook access, SQL access and item management, without administrative rights. </p>
+<p><a id="171-scenario-1-etat-de-base-le-plus-propre-possible"></a></p>
+<h4>1.7.1 Scenario 1 – Baseline (as clean as possible) </h4>
+<p><strong>Tested configuration: </strong></p>
+<ul>
+<li>Role Workspace:  <strong>Viewer</strong></li>
+<li>Lakehouse Permissions:  <strong>Read + ViewOutput</strong> uniquement</li>
+</ul>
+<p><strong>Result observed: </strong></p>
+<ul>
+<li>The test account can open the Lakehouse. </li>
+<li>It can open the  <strong>SQL analytics endpoint</strong> and execute requests. </li>
+<li>It can see the data via the SQL endpoint (SELECT * FROM ... works). </li>
+<li>On the other hand, in the Lakehouse interface (Tables / Files), it can neither see nor manipulate data easily. </li>
+</ul>
+<p><strong>Conclusion :</strong> With minimum permissions (Read + ViewOutput), access via SQL endpoint is already possible, but experience remains limited outside the SQL. </p>
+<p><a id="172-scenario-2-ajout-de-readall"></a></p>
+<h3>1.7.2 Scenario 2 – Addition of ReadAll </h3>
+<p><strong>Tested configuration: </strong></p>
+<ul>
+<li>Role Workspace:  <strong>Viewer</strong></li>
+<li>Lakehouse Permissions:  <strong>Read + ViewOutput + ReadAll + Execute</strong></li>
+</ul>
+<p><strong>Result observed: </strong></p>
+<ul>
+<li>No significant change from Scenario 1. </li>
+<li>The test account continues to be able to execute queries in the SQL endpoint and view the data. </li>
+<li>Adding ReadAll did not change the behavior in this regard for SQL endpoint. </li>
+</ul>
+<p><strong>Conclusion :</strong> In this environment, Read alone is already enough to read data via SQL analytics endpoint. ReadAll does not bring visible benefits in this specific context. </p>
+<p><a id="173-scenario-3-test-via-spark-notebook"></a></p>
+<h3>1.7.3 Scenario 3 – Test via Spark (Notebook) </h3>
+<p><strong>Tested configuration: </strong></p>
+<ul>
+<li>Role Workspace:  <strong>Viewer</strong></li>
+<li>Lakehouse Permissions:  <strong>Read + ViewOutput + ReadAll + Execute</strong></li>
+</ul>
+<p><strong>Result observed: </strong></p>
+<ul>
+<li>In a Notebook attached to the Lakehouse, the  <strong>Run</strong> button is  <strong>non visible</strong>.</li>
+<li>The test account cannot run the Notebook, even with ReadAll and Execute granted on the Lakehouse. </li>
+</ul>
+<p><strong>Conclusion :</strong> ReadAll and Execute on Lakehouse allow access via SQL, but not enough to run a Notebook. </p>
+<p><a id="174-scenario-4-ajout-de-droits-sur-le-notebook-viewer"></a></p>
+<h4>1.7.4 Scenario 4 – Added rights to the Notebook (Viewer) </h4>
+<p><strong>Tested configuration: </strong></p>
+<ul>
+<li>Role Workspace:  <strong>Viewer</strong></li>
+<li>Lakehouse Permissions: Read + Write + Reshare + Execute + ReadAll + ViewOutput </li>
+<li>Permissions on the Notebook : Read + Edit + Share + Run </li>
+</ul>
+<p><strong>Result observed: </strong></p>
+<ul>
+<li>Despite all the rights granted on the Notebook, the  <strong>Run</strong>  button. remains invisible or does not appear. </li>
+<li>The test account still cannot run the Notebook. </li>
+</ul>
+<p><strong>Conclusion :</strong> With the role  <strong>Viewer</strong>, even by giving all possible permissions on the Notebook, execution remains blocked. Workspace is the limiting factor. </p>
+<p><a id="175-scenario-5-passage-en-contributor"></a></p>
+<h4>1.7.5 Scenario 5 – Switching to Contributor </h4>
+<p><strong>Tested configuration: </strong></p>
+<ul>
+<li>Role Workspace:  <strong>Contributor</strong></li>
+<li>Lakehouse Permissions: Read + Write + Reshare + Execute + ReadAll + ViewOutput </li>
+<li>Permissions on the Notebook : Read + Edit + Run </li>
+</ul>
+<p><strong>Result observed: </strong></p>
+<ul>
+<li>The  <strong>Run</strong>  button. Notebook becomes visible (sometimes after refreshment or latency). </li>
+<li>The test account can now run the Notebook cells successfully. </li>
+<li>SQL endpoint access remains available. </li>
+</ul>
+<p><strong>Conclusion :</strong> The role  <strong>Contributor</strong> Unlocks execution of Notebooks. This is currently the most stable role for practical demonstrations. </p>
+<p><a id="176-scenario-6-passage-en-member"></a></p>
+<h4>1.7.6 Scenario 6 – Member transition </h4>
+<p><strong>Tested configuration: </strong></p>
+<ul>
+<li>Role Workspace:  <strong>Member</strong></li>
+<li>Lakehouse Permissions: Read + Write + Reshare + Execute + ReadAll + ViewOutput + SubscribeOneLakeEvents </li>
+</ul>
+<p><strong>Result observed: </strong></p>
+<ul>
+<li>The  <strong>Run</strong> button of the Notebook  <strong>disappears </strong>.</li>
+<li>The  <strong>SQL Analytics Endpoint</strong> devient inaccessible.</li>
+<li>The Lakehouse interface (Tables / Files) becomes more visible and accessible. </li>
+</ul>
+<p><strong>Conclusion :</strong> The  <strong>Member</strong>  transition. produces an unexpected and unstable behavior: loss of access to SQL endpoint and execution of Notebook, despite wide permissions. </p>
+<p><a id="177-scenario-7-passage-en-admin"></a></p>
+<h4>1.7.7 Scenario 7 – Admin </h4>
+<p><strong>Tested configuration: </strong></p>
+<ul>
+<li>Role Workspace:  <strong>Admin</strong></li>
+<li>Lakehouse Permissions: Read + Write + Reshare + Execute + ReadAll + ViewOutput + ... </li>
+</ul>
+<p><strong>Result observed: </strong></p>
+<ul>
+<li>The  <strong>Run</strong>  button. is visible. </li>
+<li>The SQL Analytics Endpoint is accessible. </li>
+<li>Full access to the Lakehouse interface (see, create, delete tables, etc.). </li>
+</ul>
+<p><strong>Conclusion :</strong> The role  <strong>Admin</strong> gives full access, as expected. </p>
+<p><a id="18-tester-concretement-les-permissions-t-sql-du-lakehouse"></a></p>
+<h3>1.8 - Practically test T-SQL permissions from Lakehouse </h3>
+<p>In this section, you will test in real-life conditions if the  <code>GRANT</code>  commands. and  <code>DENY</code> operate reliably on a Lakehouse. </p>
+<p>You will use the  <code>test@contactemeraudeit.onmicrosoft.com</code>  account. changing its workspace role between tests. </p>
+<p><a id="181-preparation"></a></p>
+<h4>1.8.1 - Preparation </h4>
+<ol>
+<li>Log in with the  <code>dev@contactemeraudeit.onmicrosoft.com</code>.</li>
+<li> account. Open the  <strong>SQL analytics endpoint</strong> from Lakehouse  <code>RetailCorpLakehouseDemo</code>.</li>
+<li>Make sure the  <code>test@contactemeraudeit.onmicrosoft.com</code> account is currently in  <strong>Viewer</strong>  role. in the  <code>WS_SEC_1</code>.</li>
+</ol>
+<p><a id="182-test-1-grant-select-avec-role-viewer"></a></p>
+<h4> workspace. 1.8.2 - Test 1: SEECT GRANT with Viewer </h4>
+<ol>
+<li> role. Run the following script: </li>
+</ol>
+<pre><code class="language-sql">GRANT SELECT ON OBJECT::gold_sales_demo 
+TO [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<ol start="2">
+<li>Sign in with the  <code>test@contactemeraudeit.onmicrosoft.com</code>  account. (role  <strong>Viewer</strong>).</li>
+<li>Open the Lakehouse SQL analytics endpoint. </li>
+<li>Run: </li>
+</ol>
+<pre><code class="language-sql">SELECT * FROM gold_sales_demo;
+</code></pre>
+<p><strong>Observe and note: </strong><br />
+Are the data displayed correctly? </p>
+<p><a id="183-test-2-deny-select-avec-role-viewer"></a></p>
+<h4>1.8.3 - Test 2: DENY SELECT with Viewer role </h4>
+<ol>
+<li>Return with the  <code>dev</code>.</li>
+<li> account. Run: </li>
+</ol>
+<pre><code class="language-sql">DENY SELECT ON OBJECT::bronze_sales_demo 
+TO [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<ol start="3">
+<li>Return with the  <code>test</code>  account. (always in  <strong>Viewer</strong>).</li>
+<li> role. Run: </li>
+</ol>
+<pre><code class="language-sql">SELECT * FROM bronze_sales_demo;
+</code></pre>
+<p><strong>Observe and note: </strong><br />
+Is the request refused or does the data still appear? </p>
+<p><a id="184-test-3-changement-de-role-workspace-vers-contributor"></a></p>
+<h4>1.8.4 - Test 3: Change of role Workspace to Contributor </h4>
+<ol>
+<li>Return with the  <code>dev</code>.</li>
+<li> account. Go to  <strong>Workspace settings</strong> → <strong>Manage access</strong>.</li>
+<li>Change the role of  <code>test@contactemeraudeit.onmicrosoft.com</code> de <strong>Viewer</strong> to  <strong>Contributor</strong>.</li>
+<li>Record the change. </li>
+<li>Return to  <code>test</code> (now  <strong>Contributor</strong>).</li>
+<li>Re-test the two previous requests: </li>
+</ol>
+<pre><code class="language-sql">SELECT * FROM gold_sales_demo;
+SELECT * FROM bronze_sales_demo;
+</code></pre>
+<p><strong>Observe and note: </strong><br />
+Does the change of role alter the result of  <code>GRANT</code> / <code>DENY</code> ?</p>
+<p><a id="185-test-4-changement-de-role-workspace-vers-member-optionnel-mais-recommande"></a></p>
+<h4>1.8.5 - Test 4: Change of role Workspace to Member (optional but recommended) </h4>
+<ol>
+<li>Return with the  <code>dev</code>.</li>
+<li> account. Change the role of  <code>test</code> de <strong>Contributor</strong> to <strong>Member</strong>.</li>
+<li>Return with the account <code>test</code> and re-test both requests:</li>
+</ol>
+<pre><code class="language-sql">SELECT * FROM gold_sales_demo;
+SELECT * FROM bronze_sales_demo;
+</code></pre>
+<p><strong>Observe and note:</strong><br />
+Que se passe-t-il ?</p>
+<p><a id="186-synthese-des-tests"></a></p>
+<h4>1.8.6 - Summary of tests</h4>
+<p>Complete the following table during the session:</p>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Role of <code>test</code></th>
+<th>Result on <code>gold_sales_demo</code></th>
+<th>Result on <code>bronze_sales_demo</code></th>
+<th>Observation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GRANT SELECT</td>
+<td>Viewer</td>
+<td></td>
+<td>-</td>
+<td></td>
+</tr>
+<tr>
+<td>DENY SELECT</td>
+<td>Viewer</td>
+<td>-</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>GRANT / DENY after passing in Contributor</td>
+<td>Contributor</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>GRANT / DENY after passing through Member</td>
+<td>Member</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Conclusion to be drawn:</strong></p>
+<p>On a Lakehouse, the orders <code>GRANT</code> and <code>DENY</code> at object level are often used to dynamically configure permissions, they usually have a precedence to workspace roles</p>
+<hr />
+<p><a id="partie-2-creer-un-warehouse-unifie-pour-la-demonstration-principale"></a></p>
+<h2>Part 2 - Create a unified Warehouse for the main demonstration</h2>
+<p><a id="21-creer-le-warehouse-whretailcorpunifiedwarehouse"></a></p>
+<h3>2.1. - Create the Warehouse <code>WH_RetailCorpUnifiedWarehouse</code></h3>
+<ol>
+<li>Return to workspace <code>WS_SEC_1</code></li>
+<li>Click on <strong>+ New item</strong></li>
+<li>Rechercher <strong>Warehouse</strong></li>
+<li>Select <strong>Warehouse</strong></li>
+<li>Enter Name <code>WH_RetailCorpUnifiedWarehouse</code></li>
+<li>Click on <strong>Create</strong></li>
+<li>Wait for the SQL Editor to open</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Champ</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Warehouse name</strong></td>
+<td><code>WH_RetailCorpUnifiedWarehouse</code></td>
+</tr>
+<tr>
+<td><strong>Usage</strong></td>
+<td>Main SQL Security Demonstration</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>The Warehouse <code>WH_RetailCorpUnifiedWarehouse</code></li>
+<li>SQL Editor</li>
+<li>L'explorateur d'objets</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : the main support of the workshop is ready.</p>
+</blockquote>
+<p><a id="22-expliquer-la-logique-des-schemas-bronze-silver-gold-security"></a></p>
+<h3>2.2. - Explain the logic of the diagrams <code>bronze</code>, <code>silver</code>, <code>gold</code>, <code>security</code></h3>
+<table>
+<thead>
+<tr>
+<th>Diagram</th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bronze</code></td>
+<td>Gross data</td>
+</tr>
+<tr>
+<td><code>silver</code></td>
+<td>Prepared data</td>
+</tr>
+<tr>
+<td><code>gold</code></td>
+<td>Consumable business data</td>
+</tr>
+<tr>
+<td><code>security</code></td>
+<td>Security objects</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>Open a new SQL query</li>
+<li>Check that you are well in <code>WH_RetailCorpUnifiedWarehouse</code></li>
+</ol>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>A clear technical framework for the future</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : Learners know that the rest of the workshop takes place only in a Warehouse.</p>
+</blockquote>
+<p><a id="23-creer-les-schemas"></a></p>
+<h3>2.3 - Create schematics</h3>
+<ol>
+<li>Paste next script</li>
+</ol>
+<pre><code class="language-sql">CREATE SCHEMA bronze;
+GO
+
+CREATE SCHEMA silver;
+GO
+
+CREATE SCHEMA gold;
+GO
+
+CREATE SCHEMA security;
+GO
+</code></pre>
+<ol start="2">
+<li>Click on <strong>Run</strong></li>
+<li>Refresh Explorer</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Diagram</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bronze</code></td>
+<td>Zone technique brute</td>
+</tr>
+<tr>
+<td><code>silver</code></td>
+<td>Intermediate zone</td>
+</tr>
+<tr>
+<td><code>gold</code></td>
+<td>Business area</td>
+</tr>
+<tr>
+<td><code>security</code></td>
+<td>Zone RLS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>The diagrams visible in the explorer</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> The Warehouse is structured to accommodate the security demonstration.</p>
+</blockquote>
+<hr />
+<p><a id="partie-3-creer-les-tables-et-charger-les-donnees-de-demonstration"></a></p>
+<h2>Part 3 - Create tables and load demo data</h2>
+<p><a id="31-creer-les-tables-bronze-et-silver"></a></p>
+<h3>3.1. - Create Bronze and Silver tables</h3>
+<ol>
+<li>Open a new SQL query</li>
+<li>Paste next script</li>
+</ol>
+<pre><code class="language-sql">CREATE TABLE bronze.orders raw
+(
+OrderId INT NOT NULL,
+OrderDate DATE NOT NULL,
+Region VARCHAR(20) NOT NULL,
+City VARCHAR(50) NOT NULL,
+CustomerId VARCHAR(20) NOT NULL,
+ProductName VARCHAR(100) NOT NULL,
+Quantity INT NOT NULL,
+UnitPrice DECIMAL(18.2) NOT NULL,
+IngestionStatus VARCHAR(20) NOT NULL
+);
+GO
+
+CREATE TABLE bronze.customers raw
+(
+CustomerId VARCHAR(20) NOT NULL,
+CustomerName VARCHAR(100) NOT NULL,
+CustomerEmail VARCHAR(150) NOT NULL,
+Region VARCHAR(20) NOT NULL,
+VARCHAR Segment(30) NOT NULL
+);
+GO
+
+CREATE TABLE silver.orders clean
+(
+OrderId INT NOT NULL,
+OrderDate DATE NOT NULL,
+Region VARCHAR(20) NOT NULL,
+City VARCHAR(50) NOT NULL,
+CustomerId VARCHAR(20) NOT NULL,
+ProductName VARCHAR(100) NOT NULL,
+Quantity INT NOT NULL,
+UnitPrice DECIMAL(18.2) NOT NULL,
+SalesAmount DECIMAL(18.2) NOT NULL,
+QualityStatus VARCHAR(20) NOT NULL
+);
+GO
+
+CREATE TABLE silver.customers clean
+(
+CustomerId VARCHAR(20) NOT NULL,
+CustomerName VARCHAR(100) NOT NULL,
+CustomerEmail VARCHAR(150) NOT NULL,
+Region VARCHAR(20) NOT NULL,
+VARCHAR segment(30) NOT NULL,
+CustomerCategory VARCHAR(30) NOT NULL
+);
+GO
+</code></pre>
+<ol start="3">
+<li>Click on <strong>Run</strong></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Diagram</th>
+<th>Tables created</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bronze</code></td>
+<td><code>orders_raw</code>, <code>customers_raw</code></td>
+</tr>
+<tr>
+<td><code>silver</code></td>
+<td><code>orders_clean</code>, <code>customers_clean</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>Bronze and Silver tables visible in the explorer</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : the technical layers of the Warehouse are ready.</p>
+</blockquote>
+<p><a id="32-creer-les-tables-gold-et-security"></a></p>
+<h3>3.2. - Create Gold and Security tables</h3>
+<ol>
+<li>Open a new SQL query</li>
+<li>Paste next script</li>
+</ol>
+<pre><code class="language-sql">CREATE TABLE gold.sales by region
+(
+Region NVARCHAR(20) NOT NULL,
+TotalSales DECIMAL(18.2) NOT NULL,
+TotalUnits INT NOT NULL,
+RefreshDate DATE NOT NULL
+);
+GO
+
+CREATE TABLE gold.sales secure detail
+(
+OrderId INT NOT NULL,
+Region NVARCHAR(20) NOT NULL,
+City NVARCHAR(50) NOT NULL,
+CustomerName NVARCHAR(100) NOT NULL,
+CustomerEmail NVARCHAR(150) NOT NULL,
+ProductName NVARCHAR(100) NOT NULL,
+SalesAmount DECIMAL(18.2) NOT NULL,
+CustomerTier NVARCHAR(30) NOT NULL,
+InternalHow NVARCHAR(200) NOT NULL
+);
+GO
+
+CREATE TABLE gold.margin internal
+(
+Region NVARCHAR(20) NOT NULL,
+DECIMAL Income(18.2) NOT NULL,
+Estimatedcost DECIMAL(18.2) NOT NULL,
+EstimatedMargin DECIMAL(18.2) NOT NULL,
+InternalNote NVARCHAR(100) NOT NULL
+);
+GO
+
+CREATE TABLE security.user region access
+(
+UserPrincipalName NVARCHAR(150) NOT NULL,
+Region NVARCHAR(20) NOT NULL
+);
+GO
+</code></pre>
+<ol start="3">
+<li>Click on <strong>Run</strong></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Diagram</th>
+<th>Tables created</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gold</code></td>
+<td><code>sales_by_region</code>, <code>sales_secure_detail</code>, <code>margin_internal</code></td>
+</tr>
+<tr>
+<td><code>security</code></td>
+<td><code>user_region_access</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>Gold and Security tables visible in the explorer</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : the necessary objects for RLS, CLS and OLS are ready.</p>
+</blockquote>
+<p><a id="33-charger-les-donnees"></a></p>
+<h3>3.3 - Load data</h3>
+<ol>
+<li>Open a new SQL query</li>
+<li>Paste next script</li>
+</ol>
+<pre><code class="language-sql">INSERT INTO bronze.orders raw
+(OrderId, OrderDate, Region, City, CustomerId, ProductName, Quantity, UnitPrice, IngestionStatus)
+VALUE
+(1, '2026-04-01', 'Nord', 'Paris', 'C001', 'Laptop', 2, 1490.00, 'ingested'),
+(2, '2026-04-01', 'South', 'Marseille', 'C002', 'Phone', 3, 699.00, 'ingested'),
+(3, '2026-04-02', 'East', 'Strasbourg', 'C003', 'Monitor', 4, 229.00, 'ingested'),
+(4, '2026-04-02', 'West', 'Nantes', 'C004', 'Mouse', 10, 29.00, 'ingested');
+GO
+
+INSERT INTO bronze.customers raw
+(CustomerId, CustomerName, CustomerEmail, Region, Segment)
+VALUE
+('C001', 'Alice Martin', 'alice.martin@retailcorp-demo.com', 'Nord', 'Retail'),
+('C002', 'Karim Benali', 'karim.benali@retailcorp-demo.com', 'South', 'Retail'),
+('C003', 'Emma Laurent', 'emma.laurent@retailcorp-demo.com', 'East', 'Retail'),
+('C004', 'Nora Diallo', 'nora.diallo@retailcorp-demo.com', 'West', 'Retail');
+GO
+
+INSERT INTO silver.orders clean
+(OrderId, OrderDate, Region, City, CustomerId, ProductName, Quantity, UnitPrice, SalesAmount, QualityStatus)
+SELECT
+OrderId,
+OrderDate,
+Region,
+City,
+CustomerId,
+Product
+Quantity,
+UnitPrice,
+Quantity * UnitPrice,
+'validated'
+From bronze.orders raw;
+GO
+
+INSERT INTO silver.customers clean
+(CustomerId, CustomerName, CustomerEmail, Region, Segment, CustomerCategory)
+SELECT
+CustomerId,
+CustomerName,
+CustomerEmail,
+Region,
+Segment
+'Standard'
+From bronze.customers raw;
+GO
+
+INSERT INTO gold.sales by region
+(Region, TotalSales, TotalUnits, RefreshDate)
+SELECT
+Region,
+SUM(SalesAmount),
+SUM(Quantity),
+CAST(GETDATE() AS DATE)
+FROM silver.orders clean
+GROUP BY Region;
+GO
+
+INSERT INTO gold.sales secure detail
+(OrderId, Region, City, CustomerName, CustomerEmail, ProductName, SalesAmount, CustomerTier, InternalComment)
+VALUE
+(1, 'Nord', 'Paris', 'Alice Martin', 'alice.martin@retailcorp-demo.com', 'Laptop', 2980.00, 'Preferred', 'High margin'),
+(2, 'South', 'Marseille', 'Karim Benali', 'karim.benali@retailcorp-demo.com', 'Phone', 2097.00, 'Standard', 'Follow-up needed'),
+(3, 'East', 'Strasbourg', 'Emma Laurent', 'emma.laurent@retailcorp-demo.com', 'Monitor', 916.00, 'Preferred', 'Bundle offer'),
+(4, 'West', 'Nantes', 'Nora Diallo', 'nora.diallo@retailcorp-demo.com', 'Mouse', 290.00, 'Standard', 'Low value');
+GO
+
+INSERT INTO gold.margin internal
+(Region, Revenue, EstimatedCost, EstimatedMargin, InternalNote)
+VALUE
+('North', 2980.00, 2145.60, 834.40, 'Financing only'),
+('South', 2097.00, 1509.84, 587.16, 'Financing only'),
+('Est', 916.00, 659.52, 256.48, 'Finance only'),
+('West', 290.00, 208.80, 81.20, 'Financing only');
+GO
+
+INSERT INTO security.user region access
+(UserPrincipalName, Region)
+VALUE
+('participant@contactemeraudeit.onmicrosoft.com', 'Nord'),
+('test@contactemeraudeit.onmicrosoft.com', 'South'),
+('dev@contactemeraudeit.onmicrosoft.com', 'Nord'),
+('dev@contactemeraudeit.onmicrosoft.com', 'South'),
+('dev@contactemeraudeit.onmicrosoft.com', 'East'),
+('dev@contactemeraudeit.onmicrosoft.com', 'West');
+GO 
+</code></pre>
+<ol start="3">
+<li>Click on  <strong>Run</strong></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Table </th>
+<th>Usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gold.sales_by_region</code></td>
+<td>Simple business view </td>
+</tr>
+<tr>
+<td><code>gold.sales_secure_detail</code></td>
+<td>RLS + CLS </td>
+</tr>
+<tr>
+<td><code>gold.margin_internal</code></td>
+<td> Demo. OLS </td>
+</tr>
+<tr>
+<td><code>security.user_region_access</code></td>
+<td> Demo. Mapping </td>
+</tr>
+</tbody>
+</table>
+<p><strong> regions. What you need to see on the </strong> :</p>
+<ul>
+<li> screen. Data loaded without error </li>
+</ul>
+<blockquote>
+<p><strong>Expected result </strong> : the demonstration data set is ready. </p>
+</blockquote>
+<p><a id="34-verifier-les-donnees"></a></p>
+<h3>3.4 - Check </h3>
+<ol>
+<li> data. Run: </li>
+</ol>
+<pre><code class="language-sql">SELECT * FROM bronze.orders_raw;
+SELECT * FROM silver.orders_clean;
+SELECT * FROM gold.sales_by_region;
+SELECT * FROM gold.sales_secure_detail;
+SELECT * FROM gold.margin_internal;
+SELECT * FROM security.user_region_access;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th></th>
+<th> control. Expected </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Number of regions </td>
+<td>4</td>
+</tr>
+<tr>
+<td>Lines in  <code>gold.sales_secure_detail</code></td>
+<td>4</td>
+</tr>
+<tr>
+<td>Mapping security </td>
+<td>Present </td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the </strong> :</p>
+<ul>
+<li> screen. Readable results on all </li>
+</ul>
+<blockquote>
+<p><strong> tables. Expected result </strong> : the working base is validated. </p>
+</blockquote>
+<hr />
+<p><a id="partie-4-montrer-lobject-level-security-avec-les-permissions-sql"></a></p>
+<h2>Part 4 - Show Object-Level Security with SQL permissions </h2>
+<p><a id="41-verifier-le-contenu-avant-restriction"></a></p>
+<h3>4.1 - Check the contents before restriction </h3>
+<ol>
+<li>With  <code>dev</code>, run: </li>
+</ol>
+<pre><code class="language-sql">SELECT TOP 10 * FROM bronze.orders_raw;
+SELECT TOP 10 * FROM silver.orders_clean;
+SELECT TOP 10 * FROM gold.sales_by_region;
+SELECT TOP 10 * FROM gold.sales_secure_detail;
+SELECT TOP 10 * FROM gold.margin_internal;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Objet</th>
+<th>But</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bronze</td>
+<td>Check the </td>
+</tr>
+<tr>
+<td>Silver</td>
+<td> raw layer. Check the prepared layer </td>
+</tr>
+<tr>
+<td>Gold</td>
+<td>Check the </td>
+</tr>
+</tbody>
+</table>
+<p><strong> business objects. What you need to see on the </strong> :</p>
+<ul>
+<li> screen. Data visible in all </li>
+</ul>
+<blockquote>
+<p><strong> objects. Expected result </strong> : All objects respond before securing. </p>
+</blockquote>
+<p><a id="42-creer-le-schema-sandbox-pour-les-tests-ddl"></a></p>
+<h3>4.2 - Create the sandbox schema for </h3>
+<p> DDL tests. Before applying permissions, create a  <code>sandbox</code>  schema. dedicated to table creation and removal tests. This scheme exists only for DDL demonstration — it does not contain business data. </p>
+<ol>
+<li>With  <code>dev</code>, open a new SQL request </li>
+<li>Run: </li>
+</ol>
+<pre><code class="language-sql">CREATE SCHEMA sandbox;
+GO
+</code></pre>
+<ol start="3">
+<li>Check the  <code>sandbox</code> schema in the </li>
+</ol>
+<blockquote>
+<p><strong> explorer. Why a dedicated scheme? </strong> Accorder <code>ALTER ON SCHEMA</code> a user gives him the right to create, modify and delete objects in this schema. This perimeter is deliberately isolated from  <code>bronze</code>, <code>silver</code> or  <code>gold</code> to the DDL operations of the test user. </p>
+</blockquote>
+<p><a id="43-matrice-cible-des-permissions-pour-test"></a></p>
+<h3>4.3 - Matrix targets permissions for  <code>test</code></h3>
+<p>Before playing scripts, here is the full policy that we will apply to  <code>test@contactemeraudeit.onmicrosoft.com</code>. The same SQL grants will remain in place for the three Workspace role scenarios. </p>
+<table>
+<thead>
+<tr>
+<th>Diagram / Object </th>
+<th>SELECT</th>
+<th>INSERT</th>
+<th>UPDATE</th>
+<th>DELETE</th>
+<th>CREATE TABLE </th>
+<th>ALTER TABLE </th>
+<th>DROP TABLE </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bronze</code> (schema) </td>
+<td>DENY</td>
+<td>DENY</td>
+<td>DENY</td>
+<td>DENY</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>silver</code> </td>
+<td>GRANT</td>
+<td>GRANT</td>
+<td>GRANT</td>
+<td>GRANT</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>gold.sales_by_region</code></td>
+<td>GRANT</td>
+<td>DENY</td>
+<td>DENY</td>
+<td>DENY</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>gold.margin_internal</code></td>
+<td>DENY</td>
+<td>DENY</td>
+<td>DENY</td>
+<td>DENY</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>sandbox</code> </td>
+<td>GRANT</td>
+<td>GRANT</td>
+<td>—</td>
+<td>—</td>
+<td>GRANT (via ALTER SCHEMA)</td>
+<td>GRANT (via ALTER SCHEMA)</td>
+<td>GRANT (via ALTER SCHEMA)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Reading</strong> : <code>—</code> means that permission is not applicable or not explicitly configured (behavior depends on inherited rights). </p>
+</blockquote>
+<p><a id="44-appliquer-les-permissions-sql-execute-par-dev"></a></p>
+<h3>4.4 - Apply SQL permissions (executed by dev) </h3>
+<ol>
+<li>With  <code>dev</code>, open a new SQL request </li>
+<li>Paste and run the full script below</li>
+</ol>
+<pre><code class="language-sql">--===============================================================================================
+-- BRONZE: blocking everything for testing
+--===============================================================================================
+DENY SELECT ON SCHEMA::bronze TO [test@contactemeraudeit.onmicrosoft.com];
+DENY INSERT ON SCHEMA::bronze TO [test@contactemeraudeit.onmicrosoft.com];
+DENY UPDATE ON SCHEMA::bronze TO [test@contactemeraudeit.onmicrosoft.com];
+DENY DELETE ON SCHEMA::bronze TO [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+--===============================================================================================
+-- SILVER: read + write full DML
+--===============================================================================================
+GRANT SELECT ON SCHEMA::silver TO [test@contactemeraudeit.onmicrosoft.com];
+GRANT INSERT ON SCHEMA::silver TO [test@contactemeraudeit.onmicrosoft.com];
+GRANT UPDATE ON SCHEMA::silver TO [test@contactemeraudeit.onmicrosoft.com];
+GRANT DELETE ON SCHEMA::silver TO [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+--===============================================================================================
+-- GOLD: limited SELECT access, prohibited modifications
+--===============================================================================================
+GRANT SELECT ON OBJECT::gold.sales by region TO [test@contactemeraudeit.onmicrosoft.com];
+DENY INSERT ON OBJECT::gold.sales by region TO [test@contactemeraudeit.onmicrosoft.com];
+DENY UPDATE ON OBJECT::gold.sales by region TO [test@contactemeraudeit.onmicrosoft.com];
+DENY DELETE ON OBJECT::gold.sales by region TO [test@contactemeraudeit.onmicrosoft.com];
+
+DENY SELECT ON OBJECT::gold.margin internal TO [test@contactemeraudeit.onmicrosoft.com];
+DENY INSERT ON OBJECT::gold.margin internal TO [test@contactemeraudeit.onmicrosoft.com];
+DENY UPDATE ON OBJECT::gold.margin internal TO [test@contactemeraudeit.onmicrosoft.com];
+DENY DELETE ON OBJECT::gold.margin internal TO [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+--===============================================================================================
+-- SANDBOX: full DDL rights (CREATE / ALTER / DROP)
+-- HIGH CREATE TABLE: Right to database level
+-- GRANT ALTER ON SCHEMA::sandbox: allows CREATE/ALTER/DROP
+-- objects in this specific scheme
+--===============================================================================================
+GREAT CREATE TABLE TO [test@contactemeraudeit.onmicrosoft.com];
+GRANT ALTER ON SCHEMA::sandbox TO [test@contactemeraudeit.onmicrosoft.com];
+GRANT SELECT ON SCHEMA::sandbox TO [test@contactemeraudeit.onmicrosoft.com];
+GRANT INSERT ON SCHEMA::sandbox TO [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+--===============================================================================================
+-- participant: scope unchanged (read gold only)
+--===============================================================================================
+DENY SELECT ON SCHEMA::bronze TO [participant@contactemeraudeit.onmicrosoft.com];
+DENY SELECT ON SCHEMA::silver TO [participant@contactemeraudeit.onmicrosoft.com];
+GRANT SELECT ON OBJECT::gold.sales by region TO [participant@contactemeraudeit.onmicrosoft.com];
+DENY SELECT ON OBJECT::gold.margin internal TO [participant@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<ol start="3">
+<li>Click on <strong>Run</strong></li>
+<li>Check absence of error</li>
+</ol>
+<blockquote>
+<p><strong>Expected result</strong> : SQL policy is configured. The three Workspace role scenarios can now be tested.</p>
+</blockquote>
+<p><a id="45-verifier-les-permissions-enregistrees"></a></p>
+<h3>4.5 - Check recorded permissions</h3>
+<ol>
+<li>Run the following check request:</li>
+</ol>
+<pre><code class="language-sql">SELECT
+    pr.name                               AS principal_name,
+    dp.permission_name,
+    dp.state_desc,
+    dp.class_desc,
+    CASE
+        WHEN dp.class_desc = 'SCHEMA'
+            THEN SCHEMA_NAME(dp.major_id)
+        ELSE OBJECT_SCHEMA_NAME(dp.major_id)
+    END                                   AS securable_schema,
+    CASE
+        WHEN dp.class_desc = 'SCHEMA'
+            THEN '(schema)'
+        ELSE OBJECT_NAME(dp.major_id)
+    END                                   AS securable_name
+FROM sys.database_permissions dp
+LEFT JOIN sys.database_principals pr
+    ON dp.grantee_principal_id = pr.principal_id
+WHERE pr.name IN (
+    'participant@contactemeraudeit.onmicrosoft.com',
+    'test@contactemeraudeit.onmicrosoft.com'
+)
+ORDER BY principal_name, securable_schema, securable_name, permission_name;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Colonne</th>
+<th>What We Check</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>state_desc</code></td>
+<td><code>GRANT</code> or <code>DENY</code> well recorded</td>
+</tr>
+<tr>
+<td><code>permission_name</code></td>
+<td>SELECT / INSERT / UPDATE / DELETE / ALTER</td>
+</tr>
+<tr>
+<td><code>class_desc</code></td>
+<td>SCHEMA = schematic level, OBJECT = table level</td>
+</tr>
+<tr>
+<td><code>securable_name</code></td>
+<td>Name of object or <code>(schema)</code> if schematic level</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on screen</strong> :</p>
+<ul>
+<li>All permission lines configured for <code>test</code> and <code>participant</code></li>
+<li>The clear separation GRANT / DENY by operation and object</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> The SQL policy is readable, traceable and verifiable before starting the tests.</p>
+</blockquote>
+<p><a id="46-scenario-1-test-avec-le-role-workspace-contributor"></a></p>
+<h3>4.6 - Scenario 1: Test with Workspace Contributor</h3>
+<p><strong>Contexte</strong> : <code>test@contactemeraudeit.onmicrosoft.com</code> a role <strong>Contributor</strong> in <code>WS_SEC_1</code>. This is the most favourable scenario for Warehouse access.</p>
+<p><strong>Batterie de tests DML</strong></p>
+<ol>
+<li>With <code>test</code>, ouvrir <code>RetailCorpUnifiedWarehouse</code> and implement:</li>
+</ol>
+<pre><code class="language-sql">-- SELECT authorized
+SELECT TOP 5 * FROM silver.orders clean;
+SELECT TOP 5 * FROM gold.sales by region;
+
+-- SELECT blocked
+SELECT TOP 5 * FROM bronze.orders raw;
+SELECT TOP 5 * FROM gold.margin internal;
+
+-- Authorized INSERT
+INSERT INTO silver.orders clean
+(OrderId, OrderDate, Region, City, CustomerId, ProductName,
+Quantity, UnitPrice, SalesAmount, QualityStatus)
+VALUE (99, '2026-04-20', 'North', 'Lyon', 'C099', 'Keyboard', 1, 79.00, 79.00, 'validated');
+GO
+
+-- Authorized UPDATE
+UPDATE silver.orders clean
+SET QualityStatus = 'reviewed'
+WHERE OrderId = 99;
+GO
+
+-- DELETE allowed
+DELETE FROM silver.orders clean WHERE OrderId = 99;
+GO
+
+-- INSERT blocked on gold
+INSERT INTO gold.sales by region (Region, TotalSales, TotalUnits, RefreshDate)
+VALUE ('Test', 0, 0, CAST(GETDATE() AS DATE));
+GO
+
+-- DELETE blocked on gold
+DELETE FROM gold.sales by region WHERE Region = 'North';
+GO
+</code></pre>
+<p><strong>Batterie de tests DDL</strong></p>
+<ol start="2">
+<li>Always with <code>test</code>, run in sandbox :</li>
+</ol>
+<pre><code class="language-sql">-- CREATE TABLE authorized
+CREATE TABLE sandbox.test table
+(
+Id INT NOT NULL,
+Note NVARCHAR(50)
+);
+GO
+
+-- INSERT in the created table
+INSERT INTO sandbox.test table (Id, Note) VALUE (1, 'DDL OK test');
+GO
+
+-- ALTER TABLE authorized
+ALTER TABLE sandbox.test table ADD CreatedAt DATE;
+GO
+
+-- DROP TABLE authorized
+DROP TABLE sandbox.test table;
+GO
+</code></pre>
+<p><strong>Expected results — Contributor</strong></p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Objet cible</th>
+<th>Expected result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SELECT</td>
+<td><code>silver.orders_clean</code></td>
+<td>Authorized</td>
+</tr>
+<tr>
+<td>SELECT</td>
+<td><code>gold.sales_by_region</code></td>
+<td>Authorized</td>
+</tr>
+<tr>
+<td>SELECT</td>
+<td><code>bronze.orders_raw</code></td>
+<td>(DENY)</td>
+</tr>
+<tr>
+<td>SELECT</td>
+<td><code>gold.margin_internal</code></td>
+<td>(DENY)</td>
+</tr>
+<tr>
+<td>INSERT</td>
+<td><code>silver.orders_clean</code></td>
+<td>Authorized</td>
+</tr>
+<tr>
+<td>UPDATE</td>
+<td><code>silver.orders_clean</code></td>
+<td>Authorized</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>silver.orders_clean</code></td>
+<td>Authorized</td>
+</tr>
+<tr>
+<td>INSERT</td>
+<td><code>gold.sales_by_region</code></td>
+<td>(DENY)</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>gold.sales_by_region</code></td>
+<td>(DENY)</td>
+</tr>
+<tr>
+<td>CREATE TABLE</td>
+<td><code>sandbox</code></td>
+<td>Authorized</td>
+</tr>
+<tr>
+<td>ALTER TABLE</td>
+<td><code>sandbox.test_table</code></td>
+<td>Authorized</td>
+</tr>
+<tr>
+<td>DROP TABLE</td>
+<td><code>sandbox.test_table</code></td>
+<td>Authorized</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Key message</strong> : with the Contributor role, SQL permissions work in a way <strong>stable and predictable</strong>. GRANT allows, DENY blocks, and DDL rights in the sandbox work properly.</p>
+</blockquote>
+<p><a id="47-scenario-2-test-avec-le-role-workspace-member"></a></p>
+<h3>4.7 - Scenario 2: Test with Workspace Member</h3>
+<p><strong>Contexte</strong> : changing the role of <code>test</code> en <strong>Member</strong> in the workingspace parameters, <strong>sans modifier aucune permission SQL</strong>.</p>
+<ol>
+<li>With <code>dev</code>, go in <strong>Workspace settings → Manage access</strong></li>
+<li>Changing the role of <code>test@contactemeraudeit.onmicrosoft.com</code> de <code>Contributor</code> vers <code>Member</code></li>
+<li>Enregistrer</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Former role</th>
+<th>New role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Contributor</td>
+<td>Member</td>
+</tr>
+</tbody>
+</table>
+<ol start="4">
+<li>With <code>test</code>, <strong>refresh the interface</strong> and replay the same DML + DDL test battery in section 4.6</li>
+</ol>
+<p><strong>Expected results — Member</strong></p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Objet cible</th>
+<th>Expected result</th>
+<th>Commentaire</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SELECT</td>
+<td><code>silver.orders_clean</code></td>
+<td></td>
+<td>Possible loss of access to SQL endpoint according to config</td>
+</tr>
+<tr>
+<td>SELECT</td>
+<td><code>gold.sales_by_region</code></td>
+<td></td>
+<td>Idem</td>
+</tr>
+<tr>
+<td>SELECT</td>
+<td><code>bronze.orders_raw</code></td>
+<td>Denied</td>
+<td>DENY SQL reste actif</td>
+</tr>
+<tr>
+<td>INSERT</td>
+<td><code>silver.orders_clean</code></td>
+<td></td>
+<td>Si endpoint accessible</td>
+</tr>
+<tr>
+<td>UPDATE</td>
+<td><code>silver.orders_clean</code></td>
+<td></td>
+<td>Si endpoint accessible</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>silver.orders_clean</code></td>
+<td></td>
+<td>Si endpoint accessible</td>
+</tr>
+<tr>
+<td>CREATE TABLE</td>
+<td><code>sandbox</code></td>
+<td></td>
+<td>Depends on access to the Warehouse</td>
+</tr>
+<tr>
+<td>DROP TABLE</td>
+<td><code>sandbox.test_table</code></td>
+<td></td>
+<td>Idem</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Key message</strong> : the Member role can paradoxically <strong>cause instability</strong> in access to the Warehouse SQL endpoint, as observed on the Lakehouse in section 1.7. SQL permissions are still in place on the engine side, but accessibility of the interface can deteriorate. <strong>DENYs are still active</strong> — it is the minimum guarantee.</p>
+<p>⚠️ <strong>Trap</strong> : si <code>test</code> loses access to the Warehouse IU with the role Member, one may be tempted to re-give him permissions from it. This can reset SQL grants. Revalidate after each change.</p>
+</blockquote>
+<p><a id="48-scenario-3-test-avec-le-role-workspace-viewer"></a></p>
+<h3>4.8 - Scenario 3: Test with Workspace Viewer</h3>
+<p><strong>Contexte</strong> : changing the role of <code>test</code> en <strong>Viewer</strong>, still without changing SQL permissions.</p>
+<ol>
+<li>With <code>dev</code>changing the role of <code>test</code> de <code>Member</code> vers <code>Viewer</code></li>
+<li>Enregistrer</li>
+<li>With <code>test</code>, refresh and try to access the Warehouse</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Former role</th>
+<th>New role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Member</td>
+<td>Viewer</td>
+</tr>
+</tbody>
+</table>
+<ol start="4">
+<li>Replay DML + DDL Test Battery</li>
+</ol>
+<p><strong>Expected results — Viewer</strong></p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Objet cible</th>
+<th>Expected result</th>
+<th>Commentaire</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Connection to the SQL Warehouse</td>
+<td>—</td>
+<td></td>
+<td>Viewer may not have access to SQL endpoint without explicit d</td>
+</tr>
+<tr>
+<td>SELECT</td>
+<td><code>silver.orders_clean</code></td>
+<td>❌</td>
+<td>Inaccessible if connection fails</td>
+</tr>
+<tr>
+<td>INSERT / UPDATE / DELETE</td>
+<td><code>silver.*</code></td>
+<td>❌</td>
+<td>Idem</td>
+</tr>
+<tr>
+<td>CREATE TABLE</td>
+<td><code>sandbox</code></td>
+<td>❌</td>
+<td>DDL blocked</td>
+</tr>
+<tr>
+<td>SELECT</td>
+<td><code>bronze.orders_raw</code></td>
+<td>❌</td>
+<td>DENY SQL toujours actif si connexion possible</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Key message</strong> The Viewer role in a Warehouse behaves differently from the Lakehouse. Without explicit permission (<code>Read</code> on the Warehouse), the account cannot usually connect to the SQL endpoint. <strong>SQL permissions do not even apply</strong> — access is cut upstream. This is the most restrictive and clear case to be demonstrated.</p>
+<p>💡 <strong>Astuce formateur</strong> : This Viewer scenario on Warehouse is the best example to explain the difference between permission from item (access to Warehouse) and SQL permission (access to data inside). Both layers are independent and apply in cascade.</p>
+</blockquote>
+<p><a id="49-remettre-test-en-contributor-avant-de-continuer"></a></p>
+<h3>4.9 - Test again as a Contributor before continuing</h3>
+<p>Before proceeding to Part 5, <code>test</code> in a stable state for the continuation of the workshop.</p>
+<ol>
+<li>With <code>dev</code>the role of <code>test</code> en <strong>Contributor</strong></li>
+<li>Check that <code>test</code> can access the Warehouse again and run SELECT requests</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Final role for the future</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Contributor</td>
+</tr>
+<tr>
+<td><code>participant@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Viewer</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Expected result</strong> : <code>test</code> is back in operation. The workshop can continue with the implementation of the SLR.</p>
+</blockquote>
+<hr />
+<p><a id="partie-5-roles-db-built-in-et-custom-dans-le-warehouse"></a></p>
+<h2>Part 5 - DB roles: Build-in and Custom in Warehouse</h2>
+<p>Database roles (<strong>DB roles</strong>) constitute an intermediate security layer between granular SQL permissions (individual GRANT/DENY seen in Part 4) and workspace management. They allow <strong>group permissions under a name</strong> and assigning users to this group rather than managing rights one by one.</p>
+<p>Microsoft Fabric Warehouse exhibits the same fixed roles as SQL Server, accessible in explorer under <strong>Security &gt; DB roles (Built-in)</strong>. It also helps to create <strong>Custom roles</strong> via <code>CREATE ROLE</code>.</p>
+<blockquote>
+<p><strong>Official reference</strong> : <a href="https://learn.microsoft.com/en-us/fabric/data-warehouse/sql-granular-permissions">SQL granular permissions in Microsoft Fabric</a> — <a href="https://learn.microsoft.com/en-us/sql/relational-databases/security/authentication-access/database-level-roles">Database-Level Roles (SQL Server)</a></p>
+</blockquote>
+<p><a id="51-presenter-les-roles-db-built-in-du-warehouse"></a></p>
+<h3>5.1. - Present the DB Build-in roles of the Warehouse</h3>
+<p><a id="roles-visibles-dans-lexplorateur"></a></p>
+<h4>Visible roles in the explorer</h4>
+<table>
+<thead>
+<tr>
+<th>Role Build-in</th>
+<th>Permissions effectives</th>
+<th>Relevance to Fabric</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>db_owner</code></td>
+<td>Total control : DDL, DML, security, configuration</td>
+<td>Complete — reserved for directors</td>
+</tr>
+<tr>
+<td><code>db_accessadmin</code></td>
+<td>Manages the addition/deletion of users in the database</td>
+<td>Limited — no SQL auth in Fabric (Entra ID only)</td>
+</tr>
+<tr>
+<td><code>db_securityadmin</code></td>
+<td>GRANT / DENY / REVOKE, role management (excluding fixed roles)</td>
+<td>Helpful to delegate SQL security management</td>
+</tr>
+<tr>
+<td><code>db_ddladmin</code></td>
+<td>CREATE / ALTER / DROP of objects — without security rights</td>
+<td>Typical for an "architect data" role</td>
+</tr>
+<tr>
+<td><code>db_backupoperator</code></td>
+<td>Run BACKUP commands</td>
+<td>Not applicable — BACKUP not available in Fabric (SaaS)</td>
+</tr>
+<tr>
+<td><code>db_datareader</code></td>
+<td>SELECT on all base tables and views</td>
+<td>Overall reading — attention to sensitive data</td>
+</tr>
+<tr>
+<td><code>db_datawriter</code></td>
+<td>INSERT / UPDATE / DELETE on all tables</td>
+<td>Global Writing — Restrict with DENY if necessary</td>
+</tr>
+<tr>
+<td><code>db_denydatareader</code></td>
+<td>DENY SELECT explicit on all tables</td>
+<td>Blocks any read access, even if <code>db_datareader</code> is granted</td>
+</tr>
+<tr>
+<td><code>db_denydatawriter</code></td>
+<td>DENY INSERT/UPDATE/DELETE on all tables</td>
+<td>Block all writing, even if <code>db_datawriter</code> is granted</td>
+</tr>
+<tr>
+<td><code>public</code></td>
+<td>Default role — all users are members</td>
+<td>Toujours actif — ne pas y mettre de permissions</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong>Important Fabric</strong> : <code>db_backupoperator</code> and <code>db_accessadmin</code> exist in the interface but have limited utility in Fabric. <code>db_backupoperator</code> in particular has no effect because orders <code>BACKUP</code> are not available in a Warehouse Fabric (SaaS managed platform). Mention them for informational purposes without using them in demonstrations.</p>
+</blockquote>
+<p><a id="52-remise-a-zero-complete-des-permissions-de-la-partie-4"></a></p>
+<h3>5.2. - Full reset of Part 4 permissions</h3>
+<p>Before entering DB roles, it is <strong>essential to return from a virgin state</strong> both accounts. The GRANT and DENY permissions set out individually in Part 4 would create unpredictable conflicts with roles — in particular because an explicit DENY always prevails over a GRANT of role.</p>
+<blockquote>
+<p>⚠️ <strong>Rule to be retained</strong> : <code>REVOKE</code> deletes an explicit entry (whether GRANT or DENY). He does not "give" or "lock" — he erases. The user returns to the neutral state, without any explicit permission for the object concerned.</p>
+</blockquote>
+<p><strong>Complete inventory of Part 4 permissions:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Objet</th>
+<th>Permissions to revoke</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test</code></td>
+<td><code>bronze</code> (schema)</td>
+<td>DENY SELECT, INSERT, UPDATE, DELETE</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td><code>silver</code> (schema)</td>
+<td>GRANT SELECT, INSERT, UPDATE, DELETE</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td><code>gold.sales_by_region</code></td>
+<td>GRANT SELECT + DENY INSERT, UPDATE, DELETE</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td><code>gold.margin_internal</code></td>
+<td>DENY SELECT, INSERT, UPDATE, DELETE</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td><code>sandbox</code> (schema)</td>
+<td>GRANT ALTER, SELECT, INSERT</td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>database</td>
+<td>HIGH CREATE TABLE</td>
+</tr>
+<tr>
+<td><code>participant</code></td>
+<td><code>bronze</code> (schema)</td>
+<td>DENY SELECT</td>
+</tr>
+<tr>
+<td><code>participant</code></td>
+<td><code>silver</code> (schema)</td>
+<td>DENY SELECT</td>
+</tr>
+<tr>
+<td><code>participant</code></td>
+<td><code>gold.sales_by_region</code></td>
+<td>GRANT SELECT</td>
+</tr>
+<tr>
+<td><code>participant</code></td>
+<td><code>gold.margin_internal</code></td>
+<td>DENY SELECT</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>With <code>dev</code>, run the reset script <strong>complet</strong> :</li>
+</ol>
+<pre><code class="language-sql">--===============================================================================================
+-- COMPLETE RESET: test@contactemeraudeit.onmicrosoft.com
+--===============================================================================================
+
+-- Bronze: revoke DENY SELECT + DML
+REVOKE SELECT ON SCHEMA::bronze FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE INSERT ON SCHEMA::bronze FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE UPDATE ON SCHEMA::bronze FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE DELETE ON SCHEMA::bronze FROM [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+-- Silver: revoke the GRANT DML complete
+REVOKE SELECT ON SCHEMA::silver FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE INSERT ON SCHEMA::silver FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE UPDATE ON SCHEMA::silver FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE DELETE ON SCHEMA::silver FROM [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+-- Gold: revoke GRANT SELECT + DENY DML on sales by region
+REVOKE SELECT ON OBJECT::gold.sales by region FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE INSERT ON OBJECT::gold.sales by region FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE UPDATE ON OBJECT::gold.sales by region FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE DELETE ON OBJECT::gold.sales by region FROM [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+-- Gold: revoke DENY on internal margin
+REVOKE SELECT ON OBJECT::gold.margin internal FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE INSERT ON OBJECT::gold.margin internal FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE UPDATE ON OBJECT::gold.margin internal FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE DELETE ON OBJECT::gold.margin internal FROM [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+-- Sandbox: revoke DDL and DML rights
+REVOKE ALTER ON SCHEMA::sandbox FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE SELECT ON SCHEMA::sandbox FROM [test@contactemeraudeit.onmicrosoft.com];
+REVOKE INSERT ON SCHEMA::sandbox FROM [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+-- Base: revoke CREATE TABLE
+REVOKE CREATE TABLE FROM [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+--===============================================================================================
+-- COMPLETE RESET: participant@contactemeraudeit.onmicrosoft.com
+--===============================================================================================
+
+REVOKE SELECT ON SCHEMA::bronze FROM [participant@contactemeraudeit.onmicrosoft.com];
+REVOKE SELECT ON SCHEMA::silver FROM [participant@contactemeraudeit.onmicrosoft.com];
+REVOKE SELECT ON OBJECT::gold.sales by region FROM [participant@contactemeraudeit.onmicrosoft.com];
+REVOKE SELECT ON OBJECT::gold.margin internal FROM [participant@contactemeraudeit.onmicrosoft.com];
+GO 
+</code></pre>
+<ol start="2">
+<li>Check that both accounts are clean: </li>
+</ol>
+<pre><code class="language-sql">SELECT
+    pr.name            AS compte,
+    dp.permission_name,
+    dp.state_desc,
+    CASE WHEN dp.class_desc = ‘SCHEMA’ THEN SCHEMA_NAME(dp.major_id)
+         ELSE OBJECT_SCHEMA_NAME(dp.major_id) END AS securable_schema,
+    CASE WHEN dp.class_desc = ‘SCHEMA’ THEN ‘(schema)’
+         ELSE OBJECT_NAME(dp.major_id) END        AS securable_name
+FROM sys.database_permissions dp
+JOIN sys.database_principals pr ON dp.grantee_principal_id = pr.principal_id
+WHERE pr.name IN (
+    ‘test@contactemeraudeit.onmicrosoft.com’,
+    ‘participant@contactemeraudeit.onmicrosoft.com’
+)
+ORDER BY compte, securable_schema, permission_name;
+</code></pre>
+<p><strong>What you need to see on the </strong> :</p>
+<ul>
+<li> screen. No row returned (or only entries inherited from the  <code>public</code>)</li>
+</ul>
+<blockquote>
+<p><strong> role. Expected result </strong> : Both accounts are without explicit SQL permission. The environment is neutral — demonstrations of DB roles will not be disturbed by residual inputs. </p>
+</blockquote>
+<p><a id="53-scenario-a-assigner-test-au-role-dbdatareader"></a></p>
+<h3>5.3 - Scenario A: assign test to the role  <code>db_datareader</code></h3>
+<p><strong>Objective </strong> : understand what  <code>db_datareader</code> really brings to Fabric, and discover how the Workspace  <strong>Contributor</strong>  role. It is often surprising to interact with DBs. </p>
+<p><a id="phase-a1-test-avec-test-contributor-dbdatareader"></a></p>
+<h4>Phase A1 — Test with Test (Contributer) + db datareader </h4>
+<ol>
+<li>With  <code>dev</code>, run: </li>
+</ol>
+<pre><code class="language-sql">ALTER ROLE db_datareader ADD MEMBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<ol start="2">
+<li>With  <code>test</code> (Workspace role:  <strong>Contributor</strong>), run: </li>
+</ol>
+<pre><code class="language-sql">-- Global playback via db datareader
+SELECT TOP 5 * FROM bronze.orders raw;
+SELECT TOP 5 * FROM silver.orders clean;
+SELECT TOP 5 * FROM gold.margin internal;
+SELECT TOP 5 * FROM security.user region access;
+
+-- Writing test
+INSERT INTO silver.orders clean
+(OrderId, OrderDate, Region, City, CustomerId, ProductName,
+Quantity, UnitPrice, SalesAmount, QualityStatus)
+VALUES (99, ‘2026-04-20', ‘North', ‘Lyon', ‘C099', ‘Keyboard', 1, 79.00, 79.00, ‘test');
+GO 
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Operation </th>
+<th>Observed result </th>
+<th>Explication</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SELECT (toutes tables)</td>
+<td>✅</td>
+<td>Via <code>db_datareader</code></td>
+</tr>
+<tr>
+<td>INSERT <code>silver.orders_clean</code></td>
+<td>✅ <strong>— ne pas se tromper</strong></td>
+<td>Via the workspace role  <strong>Contributor</strong>, pas via <code>db_datareader</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong>Counter-intuitive observation confirmed by the actual </strong> : l’INSERT <strong> tests. succeeds </strong> alors que <code>db_datareader</code> should only grant SELECT. The reason is Fabric-specific. </p>
+</blockquote>
+<p><a id="explication-le-mapping-role-workspace-permissions-sql-implicites-dans-le-warehou"></a></p>
+<h4>Explanation: Role Workspace mapping → SQL permissions implicit in the Warehouse </h4>
+<p>In a Fabric Warehouse, the role Workspace is  <strong>not only an access control to the </strong>  item. — it translates directly into SQL permissions inside the engine: </p>
+<table>
+<thead>
+<tr>
+<th>Role Workspace </th>
+<th>Implicit SQL Permissions in the Warehouse </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Admin</strong></td>
+<td>Equivalent  <code>db_owner</code> — total control </td>
+</tr>
+<tr>
+<td><strong>Member</strong></td>
+<td>Play + write DML (SELECT, INSERT, UPDATE, DELETE) </td>
+</tr>
+<tr>
+<td><strong>Contributor</strong></td>
+<td>Play + write DML (SELECT, INSERT, UPDATE, DELETE) </td>
+</tr>
+<tr>
+<td><strong>Viewer</strong></td>
+<td>Play only (SELECT only)</td>
+</tr>
+</tbody>
+</table>
+<p>A  <strong>Contributor</strong>  user. has already written rights implicit in the Warehouse,  <strong>independent of any DB role </strong>. Add  <code>db_datareader</code> to a Contributor does not restrict anything — on the contrary, the rights inherited from the workspace remain active. </p>
+<blockquote>
+<p><strong>Key rule to remember </strong> : In Fabric Warehouse, the Workspace role acts as a  <strong>plancher de permissions</strong>Not like a ceiling. A DB role cannot restrict what the Workspace role grants — only a  <code>DENY</code> SQL explicit can. </p>
+</blockquote>
+<ol start="3">
+<li>Clean the inserted test line: </li>
+</ol>
+<pre><code class="language-sql">DELETE FROM silver.orders_clean WHERE OrderId = 99;
+GO
+</code></pre>
+<p><a id="phase-a2-isoler-dbdatareader-test-avec-le-role-workspace-viewer"></a></p>
+<h4>Phase A2 — Isoler db datareader: Test with Workspace Viewer </h4>
+<p>To demonstrate the actual behavior of  <code>db_datareader</code> without interference of the Workspace role, temporarily pass  <code>test</code> en <strong>Viewer</strong>.</p>
+<ol start="4">
+<li>
+<p>With  <code>dev</code>, change the role of  <code>test</code> en <strong>Viewer</strong> (Workspace settings → Manage access).</p>
+</li>
+<li>
+<p>With  <code>test</code> (Viewer), replay the same battery: </p>
+</li>
+</ol>
+<pre><code class="language-sql">-- Play: must work via db datareader
+SELECT TOP 5 * FROM bronze.orders raw;
+SELECT TOP 5 * FROM silver.orders clean;
+SELECT TOP 5 * FROM gold.margin internal;
+
+-- Writing: must fail (Viewer = read only, db datareader does not give INSERT)
+INSERT INTO silver.orders clean
+(OrderId, OrderDate, Region, City, CustomerId, ProductName,
+Quantity, UnitPrice, SalesAmount, QualityStatus)
+VALUES (99, ‘2026-04-20', ‘North', ‘Lyon', ‘C099', ‘Keyboard', 1, 79.00, 79.00, ‘test');
+GO 
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Operation </th>
+<th>Role Workspace </th>
+<th>Expected result </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SELECT toutes tables</td>
+<td>Viewer + db_datareader</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>INSERT</td>
+<td>Viewer + db_datareader</td>
+<td>- Denied </td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Expected result </strong> : en isolation (Viewer), <code>db_datareader</code> gives a good overall reading and blocks writing. This result confirms that it was the Workspace Contributor — not  <code>db_datareader</code> — qui accordait l’INSERT en Phase A1.</p>
+</blockquote>
+<ol start="6">
+<li><strong>Remettre <code>test</code> en Contributor</strong> before going to the following scenario: </li>
+</ol>
+<pre><code class="language-sql">-- In Workspace settings → Manage access : role Contributor for 
+</code></pre>
+<blockquote>
+<p><strong> test. Key message for learners </strong> : <code>db_datareader</code> on a Contributor is  <strong>redondant</strong> — the Contributor has already SELECT through its Workspace role.  <code>db_datareader</code> on a Viewer is  <strong>utile</strong> to ensure that all tables are read without managing GRANT objects by object. In both cases,  <strong>the Workspace role fixes the floor, not the ceiling </strong>. This is the opposite of what would be expected from standard SQL Server. </p>
+</blockquote>
+<p><a id="54-scenario-b-ajouter-test-a-dbdatawriter"></a></p>
+<h3>5.4 - Scenario B: add test to  <code>db_datawriter</code></h3>
+<p><strong></strong> lens: combine reading + writing via two build-in roles. </p>
+<ol>
+<li>With  <code>dev</code>, run: </li>
+</ol>
+<pre><code class="language-sql">ALTER ROLE db_datawriter ADD MEMBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<ol start="2">
+<li>With <code>test</code>, tester :</li>
+</ol>
+<pre><code class="language-sql">-- INSERT must work now
+INSERT INTO silver.orders clean
+(OrderId, OrderDate, Region, City, CustomerId, ProductName,
+Quantity, UnitPrice, SalesAmount, QualityStatus)
+VALUE (99, '2026-04-20', 'North', 'Lyon', 'C099', 'Keyboard', 1, 79.00, 79.00, 'test');
+GO
+
+-- UPDATE must work
+UPDATE silver.orders clean SET QualityStatus = 'reviewed' WHERE OrderId = 99;
+GO
+
+-- DELETE must work
+DELETE FROM silver.orders clean WHERE OrderId = 99;
+GO
+
+-- DELETE on gold must also work (db datawriter covers everything)
+-- Be careful: it deletes a real line — to do in controlled demo
+DELETE FROM gold.sales by region WHERE Region = 'West';
+GO
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Expected result</th>
+<th>Commentaire</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>INSERT silver</td>
+<td>✅</td>
+<td>Via db_datawriter</td>
+</tr>
+<tr>
+<td>UPDATE silver</td>
+<td>✅</td>
+<td>Via db_datawriter</td>
+</tr>
+<tr>
+<td>DELETE silver</td>
+<td>✅</td>
+<td>Via db_datawriter</td>
+</tr>
+<tr>
+<td>DELETE gold</td>
+<td>✅</td>
+<td>Via db_datawriter — <strong>dangereux sans restriction</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Key message</strong> : the combination <code>db_datareader</code> + <code>db_datawriter</code> is equivalent to full DML access across the entire database. Without explicit restriction via <code>DENY</code>, a user in these two roles can <strong>read and edit all tables of all diagrams</strong>, including sensitive or critical data.</p>
+</blockquote>
+<ol start="3">
+<li>Restore deleted line before continuing:</li>
+</ol>
+<pre><code class="language-sql">INSERT INTO gold.sales_by_region (Region, TotalSales, TotalUnits, RefreshDate)
+VALUES ('Ouest', 290.00, 10, CAST(GETDATE() AS DATE));
+GO
+</code></pre>
+<p><a id="55-scenario-c-conflit-dbdatareader-dbdenydatareader"></a></p>
+<h3>5.5. - Scenario C: conflict <code>db_datareader</code> + <code>db_denydatareader</code></h3>
+<p><strong>Objective</strong> Demonstrate the fundamental rule — <strong>DENY always wins over GRANT</strong>even through a role.</p>
+<ol>
+<li>With <code>dev</code>, add <code>test</code> to <code>db_denydatareader</code> sans retirer <code>db_datareader</code> :</li>
+</ol>
+<pre><code class="language-sql">ALTER ROLE db_denydatareader ADD MEMBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<ol start="2">
+<li>With <code>test</code>, test immediately :</li>
+</ol>
+<pre><code class="language-sql">SELECT TOP 5 * FROM silver.orders_clean;
+SELECT TOP 5 * FROM gold.sales_by_region;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Expected result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>db_datareader</code> ✅ + <code>db_denydatareader</code> ❌</td>
+<td>❌ <strong>Denied</strong> — DENY gagne</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Key message</strong> This is the T-SQL priority rule: a <strong>DENY explicite</strong> (whether direct or through a role) <strong>cancel all GRANT</strong>, whether they are direct or inherited from another role. Even if <code>test</code> is in <code>db_datareader</code>, being in <code>db_denydatareader</code> Blocks any read access.</p>
+<p>⚠️ <strong>Classic trap</strong> : an administrator adds a user to <code>db_datareader</code> to give him access, but this user was already in <code>db_denydatareader</code> — access remains blocked and diagnosis can take time if this is not known.</p>
+</blockquote>
+<ol start="3">
+<li>Retirer <code>test</code> the two roles before moving on:</li>
+</ol>
+<pre><code class="language-sql">ALTER ROLE db_datareader    DROP MEMBER [test@contactemeraudeit.onmicrosoft.com];
+ALTER ROLE db_datawriter    DROP MEMBER [test@contactemeraudeit.onmicrosoft.com];
+ALTER ROLE db_denydatareader DROP MEMBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<p><a id="56-scenario-d-role-dbddladmin"></a></p>
+<h3>5.6. - Scenario D: Role <code>db_ddladmin</code></h3>
+<p><strong>Objective</strong> Show that a DDL role allows you to create/modify/delete objects without giving access to data.</p>
+<ol>
+<li>With <code>dev</code>, assigner <code>test</code> to <code>db_ddladmin</code> :</li>
+</ol>
+<pre><code class="language-sql">ALTER ROLE db_ddladmin ADD MEMBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<ol start="2">
+<li>With <code>test</code>, test DDL operations in the sandbox :</li>
+</ol>
+<pre><code class="language-sql">-- CREATE TABLE: allowed via db ddladmin
+CREATE TABLE sandbox.ddl test
+(
+Id INT NOT NULL,
+Label NVARCHAR(50)
+);
+GO
+
+-- ALTER TABLE: authorized
+ALTER TABLE sandbox.ddl test ADD CreatedAt DATE;
+GO
+
+-- DROP TABLE: Authorized
+DROP TABLE sandbox.ddl test;
+GO
+
+-- SELECT on data: refused (db ddladmin does not give SELECT)
+SELECT TOP 5 * FROM silver.orders clean;
+GO
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Expected result</th>
+<th>Commentaire</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CREATE TABLE sandbox</td>
+<td>✅</td>
+<td>Via db_ddladmin</td>
+</tr>
+<tr>
+<td>ALTER TABLE sandbox</td>
+<td>✅</td>
+<td>Via db_ddladmin</td>
+</tr>
+<tr>
+<td>DROP TABLE sandbox</td>
+<td>✅</td>
+<td>Via db_ddladmin</td>
+</tr>
+<tr>
+<td>SELECT silver</td>
+<td>❌</td>
+<td>db_ddladmin ne donne pas SELECT</td>
+</tr>
+<tr>
+<td>GRANT / DENY (security)</td>
+<td>❌</td>
+<td>db ddladmin does not manage permissions</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Key message</strong> : <code>db_ddladmin</code> is the ideal role for a "data architect" or " pipeline engineer" profile to create and manage tables, <strong>without access to business data or security management</strong>. It is a separation of responsibilities.</p>
+</blockquote>
+<ol start="4">
+<li>Retirer <code>test</code> role:</li>
+</ol>
+<pre><code class="language-sql">ALTER ROLE db_ddladmin DROP MEMBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<p><a id="57-scenario-e-creer-un-role-custom-rolegoldanalyst"></a></p>
+<h3>5.7 - Scenario E: creating a custom role <code>role_gold_analyst</code></h3>
+<p><strong>Objective</strong> Show how to define a custom role with precisely targeted permissions — structured alternative to the individual GRANT/DENY in Part 4.</p>
+<ol>
+<li>With <code>dev</code>create the role and assign permissions:</li>
+</ol>
+<pre><code class="language-sql">-- Create the custom role
+CREATE ROLE role gold analyst;
+GO
+
+-- Allow SELECT only on gold views accessible
+GRANT SELECT ON OBJECT::gold.sales by region TO role gold analysis;
+GRANT SELECT ON OBJECT::gold.sales secure detail TO role gold analyst;
+
+-- explicitly block sensitive table
+DENY SELECT ON OBJECT::gold.margin internal TO role gold analyst;
+
+-- Block bronze and silver
+DENY SELECT ON SCHEMA::bronze TO role gold analyst;
+DENY SELECT ON SCHEMA::silver TO role gold analyst;
+GO
+
+-- Assign test to the custom role
+ALTER ROLE role gold analyst ADD MEMBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<ol start="2">
+<li>With <code>test</code>, tester :</li>
+</ol>
+<pre><code class="language-sql">SELECT TOP 5 * FROM gold.sales by region; -- must succeed
+SELECT TOP 5 * FROM gold.sales secure detail; -- must succeed
+SELECT TOP 5 * FROM gold.margin internal; -- must fail
+SELECT TOP 5 * FROM silver.orders clean; -- must fail
+SELECT TOP 5 * FROM bronze.orders raw; -- must fail
+INSERT INTO gold.sales by region (Region, TotalSales, TotalUnits, RefreshDate)
+VALUE ('Test', 0, 0, CAST(GETDATE() AS DATE)); -- must fail
+GO
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Expected result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SELECT <code>gold.sales_by_region</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>SELECT <code>gold.sales_secure_detail</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>SELECT <code>gold.margin_internal</code></td>
+<td>❌ (DENY)</td>
+</tr>
+<tr>
+<td>SELECT <code>silver.*</code></td>
+<td>❌ (DENY)</td>
+</tr>
+<tr>
+<td>SELECT <code>bronze.*</code></td>
+<td>❌ (DENY)</td>
+</tr>
+<tr>
+<td>INSERT <code>gold.*</code></td>
+<td>(not granted)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Key message</strong> : a custom role is a <strong>bonne pratique de gouvernance</strong>. It centralizes the definition of rights in one place, it is reusable (several users can be added to it), and it is auditable via system views.</p>
+</blockquote>
+<p><a id="58-inspecter-les-roles-et-membres-via-les-vues-systeme"></a></p>
+<h3>5.8 - Inspect roles and members via system views</h3>
+<ol>
+<li>List all the roles of the base and its members:</li>
+</ol>
+<pre><code class="language-sql">-- Role members (build-in + custom)
+SELECT
+r.name AS role name,
+m.name AS member name,
+r.type desc,
+CASE WHEN r.is fixed role = 1 THEN 'Built-in' ELSE 'Custom' END AS role type
+FROM sys.database role members drm
+JOIN sys.database principals r ON drm.role principal id = r.principal id
+JOIN sys.database principals m ON drm.member principal id = m.principal id
+ORDER BY role type DESC, r.name, m.name;
+</code></pre>
+<ol start="2">
+<li>List permissions granted to a custom role:</li>
+</ol>
+<pre><code class="language-sql">-- Permissions granted to role gold analyst
+SELECT
+dp.permission name,
+dp.state desc,
+dp.class desc,
+CASE WHEN dp.class desc = 'SCHEMA' THEN SCHEMA NAME(dp.major id)
+ELSE OBJECT SCHEMA NAME(dp.major id) END AS secure schema,
+CASE WHEN dp.class desc = 'SCHEMA' THEN '(schema)'
+ELSE OBJECT NAME(dp.major id) END AS secure name
+FROM sys.database permissions dp
+JOIN sys.database principals pr ON dp.grantee principal id = pr.principal id
+WHERE pr.name = 'role gold analyst'
+ORDER BY secure schema, permission name;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>System view</th>
+<th>Contenu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sys.database_role_members</code></td>
+<td>Who is a member of what role</td>
+</tr>
+<tr>
+<td><code>sys.database_principals</code></td>
+<td>All principals (users, roles)</td>
+</tr>
+<tr>
+<td><code>sys.database_permissions</code></td>
+<td>All explicit permissions (on users AND roles)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Expected result</strong> : learners can completely audit the configuration of roles via T-SQL, without going through the interface.</p>
+</blockquote>
+<p><a id="59-comparaison-db-roles-vs-grantdeny-direct"></a></p>
+<h3>5.9 - Comparaison : DB roles vs GRANT/DENY direct</h3>
+<table>
+<thead>
+<tr>
+<th>Criteria</th>
+<th>GRANT/DENY individual (Part 4)</th>
+<th>DB Roles (custom or build-in)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Granularity</td>
+<td>Maximum — objet par objet</td>
+<td>Average — defined at role level</td>
+</tr>
+<tr>
+<td>Maintenance</td>
+<td>Complex with many users</td>
+<td>Simple — add/remove a member</td>
+</tr>
+<tr>
+<td>Reusability</td>
+<td>Faible</td>
+<td>High — a role, N members</td>
+</tr>
+<tr>
+<td>Auditability</td>
+<td>Via <code>sys.database_permissions</code></td>
+<td>Via <code>sys.database_role_members</code> + <code>sys.database_permissions</code></td>
+</tr>
+<tr>
+<td>Cas d’usage</td>
+<td>Very specific Permissions by User</td>
+<td>Groupes de profils (analyst, writer, admin)</td>
+</tr>
+<tr>
+<td>Conflit DENY</td>
+<td>DENY direct &gt; BIG role</td>
+<td>DENY role &gt; BIG or direct</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Final Key Message</strong> : in a Warehouse Fabric, the good practice is to <strong>combining the two approaches</strong> — use custom roles to manage typical profiles, and add <code>DENY</code> for particularly sensitive exceptions or data (e.g.: <code>gold.margin_internal</code>).</p>
+</blockquote>
+<p><a id="510-nettoyer-avant-de-passer-a-la-partie-6"></a></p>
+<h3>5.10 - Clean before moving to Part 6</h3>
+<pre><code class="language-sql">-- Remove test from custom role
+ALTER ROLE role gold analyst DROP MEMOBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+-- Delete the custom role (the permissions granted to the role are deleted with it)
+DROP ROLE role gold analyst;
+GO 
+</code></pre>
+<blockquote>
+<p><strong>Expected result </strong> The environment is clean.  <code>test</code> ns more active SQL permissions other than those inherited from Workspace Contributor. Part 6 (RLS) can start in a known state. </p>
+</blockquote>
+<hr />
+<p><a id="partie-6-implementer-le-row-level-security-dans-le-warehouse"></a></p>
+<h2>Part 6 - Implement the Row-Level Security in the Warehouse </h2>
+<p><a id="60-remise-a-zero-avant-le-rls-verifier-letat-post-partie-5"></a></p>
+<h3>6.0 - Reset before the RLS: check the post-Part 5 </h3>
+<p> state. Before creating the predicate function and security policy, it must be ensured that no membership in a DB role in Part 5 remains. A user still a member of  <code>db_datareader</code> or a custom role not removed could distort the results of the SLR tests. </p>
+<p><strong>Objects created in Part 5 to verify / delete: </strong></p>
+<table>
+<thead>
+<tr>
+<th>Objet</th>
+<th>Type</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Appartenance <code>test</code> → <code>db_datareader</code></td>
+<td>Role built-in </td>
+<td><code>DROP MEMBER</code> if present </td>
+</tr>
+<tr>
+<td>Appartenance <code>test</code> → <code>db_datawriter</code></td>
+<td>Role built-in </td>
+<td><code>DROP MEMBER</code> if present </td>
+</tr>
+<tr>
+<td>Appartenance <code>test</code> → <code>db_denydatareader</code></td>
+<td>Role built-in </td>
+<td><code>DROP MEMBER</code> if present </td>
+</tr>
+<tr>
+<td>Appartenance <code>test</code> → <code>db_ddladmin</code></td>
+<td>Role built-in </td>
+<td><code>DROP MEMBER</code> if present </td>
+</tr>
+<tr>
+<td>Custom role  <code>role_gold_analyst</code></td>
+<td>Custom role </td>
+<td><code>DROP ROLE</code> if present </td>
+</tr>
+<tr>
+<td>Direct SQL Permissions on  <code>test</code> / <code>participant</code></td>
+<td>Permissions</td>
+<td>Check via  <code>sys.database_permissions</code></td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>With  <code>dev</code>, run the defensive cleaning script ( <code>IF EXISTS</code> avoid errors if cleaning section 5.10 has already been done): </li>
+</ol>
+<pre><code class="language-sql">-- Remove test from all building-in roles used in Part 5
+IF EXISTS (
+SELECT 1 FROM sys.database role members drm
+JOIN sys.database principals r ON drm.role principal id = r.principal id
+JOIN sys.database principals m ON drm.member principal id = m.principal id
+WHERE r.name = 'db datareader'
+AND m.name = 'test@contactemeraudeit.onmicrosoft.com'
+)
+ALTER ROLE db datareader DROP MEMOBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+IF EXISTS (
+SELECT 1 FROM sys.database role members drm
+JOIN sys.database principals r ON drm.role principal id = r.principal id
+JOIN sys.database principals m ON drm.member principal id = m.principal id
+WHERE r.name = 'db datawriter'
+AND m.name = 'test@contactemeraudeit.onmicrosoft.com'
+)
+ALTER ROLE db datawriter DROP MEMOBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+IF EXISTS (
+SELECT 1 FROM sys.database role members drm
+JOIN sys.database principals r ON drm.role principal id = r.principal id
+JOIN sys.database principals m ON drm.member principal id = m.principal id
+WHERE r.name = 'db denydatareader'
+AND m.name = 'test@contactemeraudeit.onmicrosoft.com'
+)
+ALTER ROLE db denydatareader DROP MEMOBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+IF EXISTS (
+SELECT 1 FROM sys.database role members drm
+JOIN sys.database principals r ON drm.role principal id = r.principal id
+JOIN sys.database principals m ON drm.member principal id = m.principal id
+WHERE r.name = 'db ddladmin'
+AND m.name = 'test@contactemeraudeit.onmicrosoft.com'
+)
+ALTER ROLE db ddladmin DROP MEMOBER [test@contactemeraudeit.onmicrosoft.com];
+GO
+
+-- Delete the custom role if it still exists
+IF EXISTS (SELECT 1 FROM sys.database principals WHERE name = 'role gold analyst' AND type = 'R')
+BEGIN
+-- First withdraw the remaining members
+DECLARE @sql NVARCHAR(500);
+SELECT @sql = 'ALTER ROLE role gold analyst DROP MEMOBER [' + m.name + ']'
+FROM sys.database role members drm
+JOIN sys.database principals r ON drm.role principal id = r.principal id
+JOIN sys.database principals m ON drm.member principal id = m.principal id
+WHERE r.name = 'role gold analyst';
+IF @sql IS NOT NULL EXEC sp executesql @sql;
+
+DROP ROLE role gold analyst;
+END
+GO 
+</code></pre>
+<ol start="2">
+<li>Check full state: </li>
+</ol>
+<pre><code class="language-sql">-- Checking roles for testing
+SELECT
+r.name AS role name,
+m.name AS member name,
+CASE WHEN r.is fixed role = 1 THEN 'Built-in' ELSE 'Custom' END AS role type
+FROM sys.database role members drm
+JOIN sys.database principals r ON drm.role principal id = r.principal id
+JOIN sys.database principals m ON drm.member principal id = m.principal id
+WHERE m.name IN (
+'test@contactemeraudeit.onmicrosoft.com',
+'participant@contactemeraudeit.onmicrosoft.com'
+);
+
+-- Check for residual direct SQL permissions
+SELECT pr.name, dp.permission name, dp.state desc, dp.class desc
+FROM sys.database permissions dp
+JOIN sys.database principals pr ON dp.grantee principal id = pr.principal id
+WHERE pr.name IN (
+'test@contactemeraudeit.onmicrosoft.com',
+'participant@contactemeraudeit.onmicrosoft.com'
+); 
+</code></pre>
+<p><strong>What you need to see on the </strong> :</p>
+<ul>
+<li> screen. No line in the first result (no DB membership) </li>
+<li>No row in the second result (no direct SQL permission) </li>
+</ul>
+<blockquote>
+<p><strong>Expected result </strong> : environnement neutre. <code>test</code> and  <code>participant</code> Only rights derived from their Workspace role. RLS can be demonstrated without interference. </p>
+</blockquote>
+<p><a id="61-creer-la-fonction-de-predicat"></a></p>
+<h3>6.1 - Create the </h3>
+<p> predicate function. The predicate function is the  <strong>heart of the </strong>.</p>
+<ul>
+<li>
+<p><strong> RLS mechanism. What she does </strong> : for each row read in a protected table, Fabric calls this function by passing the value of the  <code>Region</code>  column. of this line. </p>
+</li>
+<li>
+<p>The function returns  <code>1</code> (= allow) if the connected user ( <code>USER_NAME()</code>) appears in the  <code>security.user_region_access</code>  table. for this region or if it is  <code>dev</code> (the trainer, who sees everything). </p>
+</li>
+<li>
+<p>The function returns an empty table (= block) in all other cases. </p>
+</li>
+<li>
+<p><strong>What it is not </strong> This is not  <code>a classic </code>  filter. which is applied manually in queries. Once security policy is created in 6.2, </p>
+</li>
+</ul>
+<p>Fabric l'injecte <strong>automatically and invisiblely </strong> in each  <code>SELECT</code> on protected tables — the user sees only the lines to which he is entitled, without even knowing that the filter exists. </p>
+<ul>
+<li><strong>The link with our </strong>  data: the  <code>security.user_region_access</code>  table. (created in Part 3) contains the mapping  <code>participant → Nord</code> and  <code>test → Sud</code>. It is this table that the function questions each reading to decide which lines are visible. </li>
+</ul>
+<ol>
+<li>Open a new SQL </li>
+<li>Coller :</li>
+</ol>
+<pre><code class="language-sql"> query. CREATE FUNCTION security.fn region predicate(@Region AS NVARCHAR(20))
+RETURN TABLE
+WITH SCHEMABINDING
+AS
+RETURN
+SELECT 1 AS fn region predicate result
+WHERE EXISTS
+(
+SELECT 1
+FROM security.user region access AS ura
+WHERE ura.UserPrincipalName = USER NAME()
+AND ura.Region = @Region
+)
+OR USER NAME() = 'dev@contactemeraudeit.onmicrosoft.com';
+GO 
+</code></pre>
+<ol start="3">
+<li>Click on  <strong>Run</strong></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Element </th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Function name</strong></td>
+<td><code>security.fn_region_predicate</code></td>
+</tr>
+<tr>
+<td><strong>Principe</strong></td>
+<td>Filter by authorized region </td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the </strong> :</p>
+<ul>
+<li> screen. A function successfully created </li>
+</ul>
+<blockquote>
+<p><strong>Expected result </strong> The RLS predicate is ready. </p>
+</blockquote>
+<p><a id="62-creer-la-security-policy"></a></p>
+<h3>6.2 - Create security policy </h3>
+<ol>
+<li>Open a new SQL </li>
+<li>Coller :</li>
+</ol>
+<pre><code class="language-sql">CREATE SECURITY POLICY security.RegionSecurityPolicy
+ADD FILTER PREDICATE security.fn_region_predicate(Region)
+ON gold.sales_secure_detail,
+ADD FILTER PREDICATE security.fn_region_predicate(Region)
+ON gold.sales_by_region
+WITH (STATE = ON);
+GO
+</code></pre>
+<ol start="3">
+<li> query. Click on  <strong>Run</strong></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Element </th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Policy name</strong></td>
+<td><code>security.RegionSecurityPolicy</code></td>
+</tr>
+<tr>
+<td><strong>Protected tables </strong></td>
+<td><code>gold.sales_secure_detail</code>, <code>gold.sales_by_region</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the </strong> :</p>
+<ul>
+<li> screen. Security policy active </li>
+</ul>
+<blockquote>
+<p><strong>Expected result </strong> The Warehouse now applies a line filter per user. </p>
+</blockquote>
+<p><a id="63-preparer-lacces-a-la-table-detaillee"></a></p>
+<h3>6.3 - Prepare access to the detailed </h3>
+<ol>
+<li> table. Run: </li>
+</ol>
+<pre><code class="language-sql">GRANT SELECT ON OBJECT::gold.sales_secure_detail
+    (OrderId, Region, City, CustomerName, ProductName, SalesAmount, CustomerTier)
+TO [participant@contactemeraudeit.onmicrosoft.com];
+GO
+
+GRANT SELECT ON OBJECT::gold.sales_secure_detail
+    (OrderId, Region, City, CustomerName, CustomerEmail, ProductName, SalesAmount, CustomerTier)
+TO [test@contactemeraudeit.onmicrosoft.com];
+GO
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Access granted </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>participant</code></td>
+<td>Trade columns without  <code>CustomerEmail</code></td>
+</tr>
+<tr>
+<td><code>test</code></td>
+<td>Trade columns with  <code>CustomerEmail</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>Successful execution</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : the accounts are ready for the RLS and CLS tests.</p>
+</blockquote>
+<p><a id="64-tester-le-rls"></a></p>
+<h3>6.4. - Test the RLS</h3>
+<ol>
+<li>With <code>participant</code>, execute:</li>
+</ol>
+<pre><code class="language-sql">SELECT Region, City, CustomerName, ProductName, SalesAmount, CustomerTier
+FROM gold.sales_secure_detail;
+</code></pre>
+<ol start="2">
+<li>Verify that only the region <code>Nord</code> appears</li>
+<li>With <code>test</code>execute the same request</li>
+<li>Verify that only the region <code>Sud</code> appears</li>
+<li>With <code>dev</code>execute the same request</li>
+<li>Check that all regions appear</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Expected region</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>participant@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Nord</td>
+</tr>
+<tr>
+<td><code>test@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Sud</td>
+</tr>
+<tr>
+<td><code>dev@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Toutes</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>Different results depending on the connected user</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> The RLS is validated on a detailed Gold table.</p>
+</blockquote>
+<p><a id="65-verifier-le-rls-sur-la-table-agregee"></a></p>
+<h3>6.5 - Check the RLS on the aggregate table</h3>
+<ol>
+<li>With <code>participant</code>, execute:</li>
+</ol>
+<pre><code class="language-sql">SELECT * FROM gold.sales_by_region;
+</code></pre>
+<ol start="2">
+<li>Verify that only the region <code>Nord</code> appears</li>
+<li>With <code>test</code>, replay the request</li>
+<li>Verify that only the region <code>Sud</code> appears</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Expected impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gold.sales_by_region</code></td>
+<td>Filtered by authorized region</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>The aggregated table also follows the RLS filter</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> The RLS applies to the two Gold tables defined in the policy.</p>
+</blockquote>
+<hr />
+<p><a id="partie-7-implementer-le-column-level-security-dans-le-warehouse"></a></p>
+<h2>Part 7 - Implementing the Column-Level Security in the Warehouse</h2>
+<p><a id="70-remise-a-zero-avant-le-cls-supprimer-les-objets-rls-de-la-partie-6"></a></p>
+<h3>7.0 - Reset to zero before the CLS: delete the RLS objects from Part 6</h3>
+<p>The CLS (Column-Level Security) can coexist technically with the RLS, but for a clear demonstration, you start Part 7 without active security policy. This prevents the row filter (RLS) from masking results and making it difficult to read column tests.</p>
+<blockquote>
+<p>⚠️ <strong>Important — column grants to be retained</strong> : the GRANTs in Section 6.3 were Grants <strong>column level</strong> (syntaxe <code>GRANT SELECT ON OBJECT (col1, col2...) TO [user]</code>), not whole table grants. They cannot be revoked by a simple <code>REVOKE SELECT ON OBJECT</code> — it would cause error <code>Msg 15151 : Cannot find the object</code>. De plus, <strong>these column permissions are exactly what the CLS demo needs</strong> — they constitute the mechanism itself. We don't remove them: we just remove security policy RLS and its function.</p>
+</blockquote>
+<p><strong>What we delete / what we keep:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Objet</th>
+<th>Type</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>security.RegionSecurityPolicy</code></td>
+<td>Security policy RLS</td>
+<td>✅ <code>DROP SECURITY POLICY</code></td>
+</tr>
+<tr>
+<td><code>security.fn_region_predicate</code></td>
+<td>Predicate function RLS</td>
+<td>✅ <code>DROP FUNCTION</code></td>
+</tr>
+<tr>
+<td>GRANT colonnes <code>gold.sales_secure_detail</code> for <code>participant</code> and <code>test</code></td>
+<td>Permissions colonne (CLS)</td>
+<td>⛔ <strong>To be retained</strong> — demo base Part 7</td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>With <code>dev</code>, only execute the deletion of RLS objects:</li>
+</ol>
+<pre><code class="language-sql">-- Disable and remove security policy RLS
+IF EXISTS (
+SELECT 1 FROM sys.security policies
+WHERE name = ‘RegionSecurityPolicy'
+AND SCHEMA NAME(schema id) = ‘security
+)
+BEGIN
+ALTER SECURITY POLICY security.RegionSecurityPolicy WITH (STATE = OFF);
+DROP SECURITY POLICY security.RegionSecurityPolicy;
+END
+GO
+
+-- Delete RLS predicate function
+IF EXISTS (
+SELECT 1 FROM sys.objects
+WHERE name = ‘fn region predicate'
+AND SCHEMA NAME(schema id) = ‘security
+AND type = ‘IF'
+)
+DROP FUNCTION security.fn region predicate;
+GO
+</code></pre>
+<ol start="2">
+<li>Check that RLS objects are deleted and column permissions are in place:</li>
+</ol>
+<pre><code class="language-sql">-- Check security policies (must return 0 line)
+SELECT name, is enabled
+FROM sys.security policies
+WHERE name = ‘RegionSecurityPolicy';
+
+-- Check function (must return 0 line)
+SELECT name, type desc
+From sys.objects
+WHERE name = ‘fn region predicate';
+
+-- Check the column permissions on gold. sales secure detail
+-- Must return the columns assigned to participant and test (minor id &gt; 0 = column level)
+SELECT
+pr.name AS account,
+dp.permission name,
+dp.state desc,
+COL NAME(dp.major id, dp.minor id) AS column arranged
+FROM sys.database permissions dp
+JOIN sys.database principals pr ON dp.grantee principal id = pr.principal id
+WHERE pr.name IN (
+‘test@contactemeraudeit.onmicrosoft.com
+‘participant@contactemeraudeit.onmicrosoft.com
+)
+AND dp.major id = OBJECT ID(‘gold.sales secure detail)
+AND dp.minor id &gt; 0 -- minor id &gt; 0 = permission at column level
+ORDER BY pr.name, dp.minor id;
+</code></pre>
+<p><strong>What you need to see on screen</strong> :</p>
+<ul>
+<li>The first two requests return <strong>0 line</strong> (RLS deleted)</li>
+<li>The third returns the columns awarded per account — confirms that CLS permissions are in place and ready for testing Part 7</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : security policy RLS is deleted. The columns in Section 6.3 are intact and form the basis of the following CLS demonstration.</p>
+<p><strong>Expected result</strong> : no security policy active, no RLS function, no direct SQL permission. The CLS will be set to zero in section 7.1.</p>
+</blockquote>
+<p><a id="71-configurer-et-appliquer-le-cls"></a></p>
+<h3>7.1 - Configure and apply the CLS</h3>
+<p><strong>Principe</strong> : <code>DENY SELECT ON OBJECT::table (column) TO [account]</code> Block a specific column. The <code>DENY</code> is always priority over everything <code>GRANT</code>, including implied permissions from Workspace — <strong>provided that the account is not <code>db_owner</code></strong>.</p>
+<blockquote>
+<p>⚠️ <strong>Why use <code>test</code> and not <code>participant</code></strong> : <code>participant</code> is Admin Workspace (= <code>db_owner</code>) — members of <code>db_owner</code> bypass all the <code>DENY</code>. <code>test</code> is Viewer (not <code>db_owner</code>) : on <code>DENY</code> applies correctly to this account.</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>Colonne</th>
+<th><code>test</code> (Viewer)</th>
+<th><code>participant</code> (Admin)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Toutes colonnes</td>
+<td>Yes (via Viewer role)</td>
+<td>Oui (via Admin)</td>
+</tr>
+<tr>
+<td><code>CustomerEmail</code></td>
+<td><strong>Non</strong> — DENY</td>
+<td>Oui</td>
+</tr>
+</tbody>
+</table>
+<p><a id="etape-1-verifier-les-roles-workspace"></a></p>
+<h4>Step 1 — Checking Workspace Roles</h4>
+<p>In the Fabric portal → <strong>Workspace settings → Manage access</strong>, confirmer :</p>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Expected role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test@contactemeraudeit.onmicrosoft.com</code></td>
+<td><strong>Viewer</strong></td>
+</tr>
+<tr>
+<td><code>participant@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Admin</td>
+</tr>
+</tbody>
+</table>
+<p><a id="etape-2-appliquer-le-deny-cls"></a></p>
+<h4>Step 2 — Apply the DENY CLS</h4>
+<p>With <code>dev</code>, execute:</p>
+<pre><code class="language-sql">-- Block sensitive column for test
+DENY SELECT ON OBJECT::gold.sales secure detail (CustomerEmail)
+TO [test@contactemeraudeit.onmicrosoft.com];
+</code></pre>
+<blockquote>
+<p><code>participant</code> (Admin) sees all the default columns — no action required.</p>
+</blockquote>
+<p><a id="etape-3-verifier-les-permissions"></a></p>
+<h4>Step 3 — Check permissions</h4>
+<pre><code class="language-sql">SELECT
+    pr.name                              AS compte,
+    dp.permission_name,
+    dp.state_desc,
+    COL_NAME(dp.major_id, dp.minor_id)  AS colonne_ciblee
+FROM sys.database_permissions dp
+JOIN sys.database_principals pr ON dp.grantee_principal_id = pr.principal_id
+WHERE pr.name IN (
+    'test@contactemeraudeit.onmicrosoft.com',
+    'participant@contactemeraudeit.onmicrosoft.com'
+)
+  AND dp.major_id = OBJECT_ID('gold.sales_secure_detail')
+  AND dp.minor_id &gt; 0;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th><code>state_desc</code></th>
+<th>Signification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DENY</code></td>
+<td>Blocked column — priority on any GRANT</td>
+</tr>
+<tr>
+<td><code>GRANT</code></td>
+<td>Column explicitly granted</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see</strong> :</p>
+<ul>
+<li>One line <code>DENY</code> on <code>CustomerEmail</code> for <code>test</code></li>
+<li>No lines for <code>participant</code> (His full access comes from the Admin role)</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> The CLS is in place. <code>test</code> will be blocked on <code>CustomerEmail</code> en 7.3, <code>participant</code> See it in 7.4.</p>
+</blockquote>
+<p><a id="72-tester-une-requete-autorisee-pour-test"></a></p>
+<h3>7.2. - Test an authorized request for <code>test</code></h3>
+<blockquote>
+<p>Prerequisites: DENY configured in 7.1. <code>test</code> is <strong>Viewer</strong> Workspace.</p>
+</blockquote>
+<ol>
+<li>With <code>test</code>, execute:</li>
+</ol>
+<pre><code class="language-sql">SELECT OrderId, Region, City, CustomerName, ProductName, SalesAmount, CustomerTier
+FROM gold.sales_secure_detail;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Request</th>
+<th>Expected result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Colonnes sans <code>CustomerEmail</code></td>
+<td>Authorized</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>The columns listed are normally displayed — only <code>CustomerEmail</code> is excluded from the request</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : <code>test</code> works on the table without touching the sensitive column.</p>
+</blockquote>
+<p><a id="73-tester-une-requete-interdite-pour-test"></a></p>
+<h3>7.3 - Test a prohibited request for <code>test</code></h3>
+<ol>
+<li>Always with <code>test</code>, execute:</li>
+</ol>
+<pre><code class="language-sql">SELECT CustomerEmail
+FROM gold.sales_secure_detail;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Request</th>
+<th>Expected result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SELECT CustomerEmail ...</code></td>
+<td>Denied</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the screen</strong> :</p>
+<ul>
+<li>Error of permission on the column</li>
+</ul>
+<blockquote>
+<p><strong>Expected result</strong> : the CLS is demonstrated — the <code>DENY</code> colonne bloque <code>test</code> even if his role Viewer gives him <code>SELECT</code> on the table.</p>
+</blockquote>
+<p>⚠️ <strong>Trap</strong> : si <code>test</code> is Admin or Member Workspace, the <code>DENY</code> can be bypassed. Check the Workspace role in 7.1 Step 1.</p>
+<p><a id="74-verifier-que-participant-voit-la-colonne-sensible"></a></p>
+<h3>7.4 - Check that <code>participant</code> see the sensitive column </h3>
+<ol>
+<li>With  <code>participant</code>, run: </li>
+</ol>
+<pre><code class="language-sql">SELECT CustomerEmail, CustomerName, Region
+FROM gold.sales_secure_detail;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Colonne sensible</th>
+<th>Expected result </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>participant</code></td>
+<td><code>CustomerEmail</code></td>
+<td>Authorized </td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the </strong> :</p>
+<ul>
+<li><code>participant</code> (Admin) voit <code>CustomerEmail</code> sans restriction</li>
+<li><code>test</code>  screen. (Viewer + DENY) doesn't see it </li>
+</ul>
+<blockquote>
+<p><strong>Expected result </strong> : the contrast between the two accounts illustrates the CLS and the db owner bypass principle. </p>
+</blockquote>
+<hr />
+<p><a id="partie-8-comparer-roles-workspace-permissions-ditem-et-permissions-sql"></a></p>
+<h2>Part 8 - Compare Workspace roles, item permissions and SQL permissions </h2>
+<p><a id="81-elever-le-role-workspace-de-test-viewer-contributor"></a></p>
+<h3>8.1 - Raise the Workspace role of  <code>test</code> (Viewer → Contributor)</h3>
+<p>The goal is to show that a Workspace  <strong>ne suffit pas</strong>  role increase. bypass a  <code>DENY</code> SQL already in place. </p>
+<ol>
+<li>With  <code>participant</code> (Admin), ouvrir <strong>Workspace settings → Manage access</strong></li>
+<li>Localiser <code>test@contactemeraudeit.onmicrosoft.com</code></li>
+<li>Change its role as  <strong>Viewer</strong> vers <strong>Contributor</strong></li>
+<li>Enregistrer</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Compte</th>
+<th>Former role </th>
+<th>New role </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test@contactemeraudeit.onmicrosoft.com</code></td>
+<td>Viewer</td>
+<td>Contributor</td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the </strong> :</p>
+<ul>
+<li> screen. The role  <code>Contributor</code> displayed for  <code>test</code></li>
+</ul>
+<blockquote>
+<p><strong>Expected result </strong> : <code>test</code> now has higher Workspace rights — we'll check if it bypasses the DENY SQL of Part 7. </p>
+</blockquote>
+<p><a id="82-rejouer-les-tests-sql-apres-changement-de-role"></a></p>
+<h3>8.2 - Replay SQL tests after changing role </h3>
+<ol>
+<li>With  <code>test</code> (now Contributor), refresh the </li>
+<li>Rejouer :</li>
+</ol>
+<pre><code class="language-sql">SELECT * FROM bronze.orders_raw;
+SELECT Region, City, CustomerName, ProductName, SalesAmount, CustomerTier
+FROM gold.sales_secure_detail;
+SELECT CustomerEmail FROM gold.sales_secure_detail;
+SELECT * FROM gold.margin_internal;
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th> interface. Expected result </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Access to Bronze </td>
+<td>Authorised (Contributor = implied DML) </td>
+</tr>
+<tr>
+<td>Access to Gold columns allowed </td>
+<td>Authorized </td>
+</tr>
+<tr>
+<td>Access to  <code>CustomerEmail</code></td>
+<td><strong>Always refused </strong> — DENY SQL overwrites the workspace role </td>
+</tr>
+<tr>
+<td>Access to  <code>gold.margin_internal</code></td>
+<td>Always refused (no permission on this scheme) </td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you need to see on the </strong> :</p>
+<ul>
+<li> screen. The access to Bronze opens (Contributor bypasses schema grants) </li>
+<li>The  <code>DENY</code> on  <code>CustomerEmail</code> holds — the Workspace role does not crush </li>
+</ul>
+<blockquote>
+<p><strong>Expected result </strong> : the key message is shown —  <strong>DENY SQL is the only reliable barrier on a </strong> sensitive column. , regardless of the Workspace role. </p>
+</blockquote>
+<p><a id="83-montrer-un-partage-fin-par-item-avec-un-warehouse-gold-separe"></a></p>
+<h3>8.3 - Show an end-to-end item sharing with a separate </h3>
+<p> Warehouse Gold. To conclude, you can show a more targeted item sharing with a separate Warehouse. </p>
+<ol>
+<li>With  <code>participant</code>, create a Warehouse  <code>RetailCorpGoldWarehouse</code></li>
+<li>Ouvrir son menu contextuel <strong>...</strong></li>
+<li>Click on  <strong>Manage permissions</strong></li>
+<li>Add  <code>test@contactemeraudeit.onmicrosoft.com</code></li>
+<li>Give him the minimum level  <strong>Read</strong></li>
+<li>Explain that this logic allows you to expose a specific Warehouse without opening all the items in the </li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Compte</th>
+<th>Permission cible</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RetailCorpGoldWarehouse</code></td>
+<td><code>test</code></td>
+<td>Read</td>
+</tr>
+</tbody>
+</table>
+<p><strong> workspace. What you need to see on the </strong> :</p>
+<ul>
+<li> screen. Targeted sharing at the item Warehouse, independent of the global Workspace role </li>
+</ul>
+<blockquote>
+<p><strong>Expected result </strong> The final comparison between Workspace role, item permission and SQL permission becomes concrete. </p>
+<p>💡 <strong>Astuce</strong> : this last step perfectly closes the educational loop. We start from the global role, go down to the item level, then finish at the SQL level. </p>
+</blockquote>
+<p><a id="84-synthese-finale-a-presenter-aux-apprenants"></a></p>
+<h3>8.4 - Final summary to be presented to learners </h3>
+<table>
+<thead>
+<tr>
+<th>Security level </th>
+<th>What it controls </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Role Workspace </td>
+<td>Global access to the </td>
+</tr>
+<tr>
+<td>Permission d'item</td>
+<td> working container. Access to a precise Fabric object </td>
+</tr>
+<tr>
+<td>Permission SQL</td>
+<td>Access to diagrams, objects, columns and lines </td>
+</tr>
+</tbody>
+</table>
+<ol>
+<li>Resuming the three levels in conclusion </li>
+<li>Link each level to a demonstration seen in the </li>
+<li> workshop. Insist on the final message: </li>
+</ol>
+<p><code>Lakehouse to show Fabric permissions and T-SQL limits; Warehouse to demonstrate fine SQL security in a stable and educational way. </code></p>
+<p><strong>What you need to see on the </strong> :</p>
+<ul>
+<li> screen. A clear and directly reusable synthesis in </li>
+</ul>
+<blockquote>
+<p><strong> formation. Expected result </strong> : Learners leave with a structured understanding of Fabric security. </p>
+</blockquote>
+<hr />
+<p><a id="nettoyage-optionnel"></a></p>
+<h2>Nettoyage (optionnel)</h2>
+<p><a id="1-supprimer-le-schema-sandbox"></a></p>
+<h3>1 - Delete the </h3>
+<pre><code class="language-sql"> sandbox schema. IF EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'sandbox')
+BEGIN
+DROP TABLE IF EXISTS sandbox.ddl test;
+DROP SCHEMA sandbox;
+END 
+</code></pre>
+<p><a id="2-supprimer-les-objets-de-demonstration-lakehouse"></a></p>
+<h3>2 - Remove Lakehouse </h3>
+<ol>
+<li>Supprimer <code>RetailCorpLakehouseDemo</code>  demonstration objects. if you no longer need </li>
+</ol>
+<p><a id="3-supprimer-les-objets-du-warehouse-principal"></a></p>
+<h3>3 - Remove objects from the Main Warehouse </h3>
+<ol>
+<li>Remove tables or delete  <code>RetailCorpUnifiedWarehouse</code></li>
+</ol>
+<p><a id="4-supprimer-les-partages-temporaires"></a></p>
+<h3> directly. 4 - Remove </h3>
+<ol>
+<li>Ouvrir <strong>Manage access</strong></li>
+<li> temporary shares. Reset roles if necessary </li>
+<li>Check temporary item permissions </li>
+</ol>
+<p><a id="5-supprimer-le-warehouse-gold-separe"></a></p>
+<h3>5 - Delete the separate Gold Warehouse </h3>
+<ol>
+<li>Supprimer <code>RetailCorpGoldWarehouse</code> if you created it for the final </li>
+</ol>
+<p><a id="6-supprimer-le-workspace-de-laboratoire"></a></p>
+<h3> demo. 6 - Remove the </h3>
+<ol>
+<li> laboratory workspace. Verify that no useful artifact should be retained </li>
+<li>Supprimer <code>WS_SEC_1</code> if the laboratory is completed </li>
+</ol>
+<blockquote>
+<p>💡 <strong>Astuce</strong> If you often run this workshop, keep the workspace and object names, then simply reset the data and permissions before each session.</p>
+</blockquote></main>
+</body>
+</html>

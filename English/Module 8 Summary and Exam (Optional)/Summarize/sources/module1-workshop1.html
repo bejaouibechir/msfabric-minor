@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workshop 1 – Harmonization of Renewable Energy Data</title>
+  <link rel="stylesheet" href="../assets/source.css">
+</head>
+<body>
+  <header class="src-header">
+    <a href="../index.html" class="back-link">&#8592; Back to presentation</a>
+    <h1 class="src-title">Workshop 1 – Harmonization of Renewable Energy Data</h1>
+  </header>
+  <main class="src-content"><p><a id="atelier-dataflow-gen2-harmonisation-des-donnees-denergies-renouvelables"></a></p>
+<h1>Dataflow Gen2 Workshop - Harmonization of Renewable Energy Data</h1>
+<p><a id="introduction"></a></p>
+<h2>📌 Introduction</h2>
+<p><a id="contexte"></a></p>
+<h3>Contexte</h3>
+<p>You're a data engineer at <strong>GreenEnergy France</strong>, a multi-energy operator that manages:</p>
+<ul>
+<li>4 parcs solaires (Paris, Lyon, Marseille, Bordeaux)</li>
+<li>5 wind farms (Normandie, Brittany, Picardie, Pays de la Loire, Centre)</li>
+<li>3 hydraulic plants (Rhône, Alps, Pyrenees)</li>
+</ul>
+<p><strong>Purpose of the workshop</strong> : Create an automated pipeline to harmonize heterogeneous data and power a unified monitoring dashboard.</p>
+<hr />
+<p><a id="etat-des-lieux"></a></p>
+<h2>State of play</h2>
+<p><a id="sources-de-donnees-actuelles"></a></p>
+<h3>Current data sources</h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Lines</th>
+<th>Problems</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>solaire_2025.csv</strong></td>
+<td>1,460</td>
+<td>❌ Valeurs NaN<br>Error codes -888<br>Incoherent nomenclature</td>
+</tr>
+<tr>
+<td><strong>eolien_2025.csv</strong></td>
+<td>1,975</td>
+<td>❌ 150 doublons exacts<br>Duplicate States<br>Units in MWh (vs kWh)</td>
+</tr>
+<tr>
+<td><strong>hydro_2025.csv</strong></td>
+<td>2,190</td>
+<td>2 Date formats (DD/MM/YYYYY and YYYY-MM-DD)<br>❌ Noms variables (HYD_RHONE vs HYD_RHONE-var)</td>
+</tr>
+<tr>
+<td><strong>calendrier_meteo_maintenance.csv</strong></td>
+<td>365</td>
+<td>Own data</td>
+</tr>
+</tbody>
+</table>
+<p><a id="exemple-de-donnees-problematiques"></a></p>
+<h3>Example of problematic data</h3>
+<p><strong>Solaire</strong> :</p>
+<pre><code class="language-csv">timestamp,park id,type,production kwh,irradiation kwh m2,temperature c,status
+2025-01-01,SOL PARIS,Solar,4250.5.4.8.15.2,OK
+2025-01-01,SOL LYON, Solar,NaN,3.2,18.5,FAULT ← NaN
+2025-01-02,SOL MARSEILLE, solar,-888.5.1,22.3,INVERTER ← Error code
+</code></pre>
+<p><strong>Wind</strong> :</p>
+<pre><code class="language-csv">date,parc_code,prod_mwh,vent_mps,etat
+2025-01-15,EOL_BRETAGNE,8.45,12.3,Running
+2025-01-15,EOL_BRETAGNE,8.45,12.3,Running  ← DOUBLON
+2025-01-15,EOL_BRETAGNE,8.45,12.3,Duplicate
+</code></pre>
+<p><strong>Hydro</strong> :</p>
+<pre><code class="language-csv">ReadingDate,PlantID,Production_kWh,Debit_m3_s,Niveau_m,Alert
+01/01/2025,HYD_RHONE,18500.2,32.5,75.2,None           ← Format DD/MM/YYYY
+2025-01-01,HYD_RHONE-var,18350.8,31.8,74.9,LowFlow   ← Format YYYY-MM-DD
+</code></pre>
+<hr />
+<p><a id="problematique"></a></p>
+<h2></h2>
+<p><a id="3-problemes-critiques"></a></p>
+<h3>3 critical issues</h3>
+<p><strong>1. Incompatible data silos</strong></p>
+<ul>
+<li>Different diagrams (park id vs park code vs PlantID)</li>
+<li>Formats de dates multiples</li>
+<li>Heterogeneous units (kWh vs MWh)</li>
+<li><strong>Impact</strong> : 2-3 hours/manual preparation day in Excel</li>
+</ul>
+<p><strong>2. Poor data quality</strong></p>
+<ul>
+<li>Doublons → Surestimation de 1,268 MWh = <strong>190,200 € potential error</strong></li>
+<li>Missing values → Calculation of distorted averages</li>
+<li>Error codes → Negative output recorded</li>
+</ul>
+<p><strong>3. Absence d'orchestration</strong></p>
+<ul>
+<li>Manual process: data available at 11.30 am (vs arrive at 6.00 am)</li>
+<li>Pas de planification automatique</li>
+<li>No business context (meteo, maintenance)</li>
+</ul>
+<hr />
+<p><a id="comment-dataflow-gen2-resout-ces-problemes"></a></p>
+<h2>How Dataflow Gen2 solves these problems</h2>
+<p><a id="pourquoi-dataflow-gen2"></a></p>
+<h3>Pourquoi Dataflow Gen2 ?</h3>
+<table>
+<thead>
+<tr>
+<th>Besoin</th>
+<th>Solution Dataflow Gen2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Unifier 4 sources</strong></td>
+<td>Ingestion multi-sources native + Power Query visuel</td>
+</tr>
+<tr>
+<td><strong>Nettoyer automatiquement</strong></td>
+<td>Transformations M (suppression doublons, filtres, types)</td>
+</tr>
+<tr>
+<td><strong>Enrich with context</strong></td>
+<td>Joints (metal + calendar)</td>
+</tr>
+<tr>
+<td><strong>Automatiser</strong></td>
+<td>Planned Pipeline (daily at 6:15)</td>
+</tr>
+<tr>
+<td><strong>Optimized storage</strong></td>
+<td>Lakehouse Delta with Append mode (historical)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>New 2025 available</strong> :</p>
+<ul>
+<li><strong>Integrated copilot</strong> : Create transformations in natural language</li>
+<li><strong>Modern Evaluator</strong> : 20-30% plus rapide que l'ancien moteur</li>
+<li><strong>Partitioned Compute</strong> : Parallel processing of files (ADLS Gen2, Lakehouse)</li>
+<li><strong>Cost reduction</strong> : 25% discount on the first 10 minutes (pricing 2-tier)</li>
+<li><strong>OneLake Catalog</strong> : Simplified discovery of Fabric sources</li>
+</ul>
+<p><a id="architecture-cible"></a></p>
+<h3>Architecture cible</h3>
+<pre><code>Sources CSV → Dataflow Gen2 → Lakehouse (Delta) → Power BI Dashboard
+                ↓
+        [Nettoyage + Transformations + Enrichissement]
+                ↓
+        Pipeline (planification quotidienne)
+</code></pre>
+<hr />
+<p><a id="mise-en-uvre-pas-a-pas"></a></p>
+<h2>Step by step implementation</h2>
+<p><a id="prerequis"></a></p>
+<h3>Prerequisite</h3>
+<ul>
+<li>✅ Workspace Fabric</li>
+<li>✅ Lakehouse <code>LH_Energies_Renouvelables</code> established</li>
+<li>CSV files uploaded in <code>/Files/data_renewable/</code></li>
+</ul>
+<hr />
+<p><a id="etape-1-creer-le-dataflow-gen2"></a></p>
+<h3>STEP 1: Create Dataflow Gen2</h3>
+<p><strong>1.1 Initialisation</strong></p>
+<ol>
+<li>Workspace → <strong>+ New</strong> → <strong>Dataflow Gen2</strong></li>
+<li>Nom : <code>DF_Harmonisation_Production_Renouvelable</code></li>
+</ol>
+<p><strong>1.2 Ingestion of the 4 sources</strong></p>
+<ol>
+<li><strong>Get data</strong> → <strong>OneLake data hub</strong></li>
+<li>Naviguer vers : <code>Lakehouse → Files → data_renewable</code></li>
+<li>Select the 4 CSV files:<br />
+   - solaire_2025.csv<br />
+   - eolien_2025.csv<br />
+   - hydro_2025.csv<br />
+   - calendrier_meteo_maintenance.csv</li>
+<li><strong>Create</strong> → Power Query Editor s'ouvre</li>
+</ol>
+<hr />
+<p><a id="etape-2-nettoyage-des-donnees"></a></p>
+<h3>STEP 2: Data Cleaning</h3>
+<p><a id="21-requete-solaire2025"></a></p>
+<h4>2.1. Request <code>solaire_2025</code></h4>
+<p><strong>Actions to be undertaken</strong> :</p>
+<ol>
+<li>
+<p><strong>Transform</strong> → <strong>Detect Data Type</strong> (types automatiques)</p>
+</li>
+<li>
+<p><strong>Home</strong> → <strong>Remove Rows</strong> → <strong>Remove Errors</strong> (on production kwh)</p>
+</li>
+<li>
+<p><strong>Home</strong> → <strong>Filter Rows</strong> → production_kwh ≠ -888</p>
+</li>
+<li>
+<p><strong>Home</strong> → <strong>Remove Duplicates</strong> (select timestamp + park id)</p>
+</li>
+<li>
+<p><strong>Transform</strong> → <strong>Rename</strong> : timestamp → date</p>
+</li>
+<li>
+<p><strong>Transform</strong> → <strong>Data Type</strong> : date → Date (sans heure)</p>
+</li>
+<li>
+<p><strong>Add Column</strong> → <strong>Custom Column</strong> :</p>
+</li>
+</ol>
+<p><code>Nom : rendement_pctFormule : if [irradiation_kwh_m2] &gt; 0 then ([production_kwh] / [irradiation_kwh_m2]) * 100 else null</code></p>
+<p><strong>Result</strong> : 1,460 → 1,370 lines (-6% invalid data)</p>
+<hr />
+<p><a id="22-requete-eolien2025"></a></p>
+<h4>2.2. Request <code>eolien_2025</code></h4>
+<p><strong>Actions</strong> :</p>
+<ol>
+<li>
+<p><strong>Home</strong> → <strong>Remove Duplicates</strong> (all columns)</p>
+</li>
+<li>
+<p><strong>Home</strong> → <strong>Filter Rows</strong> → etat ≠ "Duplicate"</p>
+</li>
+<li>
+<p><strong>Add Column</strong> → <strong>Custom Column</strong> :</p>
+</li>
+</ol>
+<p><code>Nom : production_kwhFormule : [prod_mwh] * 1000</code></p>
+<ol start="4">
+<li>
+<p><strong>Transform</strong> → <strong>Rename</strong> : parc_code → parc_id</p>
+</li>
+<li>
+<p><strong>Add Column</strong> → <strong>Custom Column</strong> :</p>
+</li>
+</ol>
+<p><code>Nom : typeFormule : "eolien"</code></p>
+<p><strong>Result</strong> : 1,975 → 1,770 lines (-10% duplicates)</p>
+<hr />
+<p><a id="23-requete-hydro2025"></a></p>
+<h4>2.3 Request <code>hydro_2025</code></h4>
+<p><strong>Actions</strong> :</p>
+<ol>
+<li>Select PlantID column → <strong>Transform</strong> → <strong>Replace Values</strong> :</li>
+</ol>
+<ul>
+<li>Chercher : <code>-var</code></li>
+<li>Remplacer : (vide)</li>
+</ul>
+<ol start="2">
+<li>
+<p><strong>Transform</strong> → <strong>Data Type</strong> → Date (for ReadingDate)</p>
+</li>
+<li>
+<p><strong>Home</strong> → <strong>Remove Duplicates</strong> (ReadingDate + PlantID)</p>
+</li>
+<li>
+<p><strong>Transform</strong> → <strong>Rename</strong> :</p>
+</li>
+</ol>
+<ul>
+<li>ReadingDate → date</li>
+<li>PlantID → parc_id</li>
+<li>Production_kWh → production_kwh</li>
+</ul>
+<ol start="5">
+<li><strong>Add Column</strong> → <strong>Custom Column</strong> :</li>
+</ol>
+<p><code>Nom : typeFormule : "hydro"</code></p>
+<p><strong>Result</strong> : 2,190 → 1,095 lines (-50% normal : fusion of variants)</p>
+<hr />
+<p><a id="24-requete-calendriermeteomaintenance"></a></p>
+<h4>2.4. Request <code>calendrier_meteo_maintenance</code></h4>
+<p><strong>Actions</strong> :</p>
+<ol>
+<li><strong>Transform</strong> → <strong>Detect Data Type</strong> (automatique)</li>
+</ol>
+<p>No cleaning required (clean data).</p>
+<hr />
+<p><a id="etape-3-fusion-et-enrichissement"></a></p>
+<h3>STEP 3: Fusion and enrichment</h3>
+<p><a id="31-fusionner-les-3-sources-energetiques"></a></p>
+<h4>3.1 Merge the 3 energy sources</h4>
+<ol>
+<li><strong>Home</strong> → <strong>Append Queries</strong> → <strong>Append Queries as New</strong></li>
+<li>Select:<br />
+   - solaire_2025<br />
+   - eolien_2025<br />
+   - hydro_2025</li>
+<li>Nom : <code>production_all_types</code></li>
+</ol>
+<p><strong>Result</strong> : Unified table with harmonized diagram (date, park id, type, production kwh)</p>
+<hr />
+<p><a id="32-enrichir-avec-meteocalendrier"></a></p>
+<h4>3.2 Enrich with weather/calendar</h4>
+<ol>
+<li>Select <code>production_all_types</code></li>
+<li><strong>Home</strong> → <strong>Merge Queries</strong> → <strong>Merge Queries as New</strong></li>
+<li>Configuration :<br />
+   - Left table: production all types<br />
+   - Right table: calendar meteo maintenance<br />
+   - Colonnes : date = date<br />
+   - Join : Left Outer</li>
+<li>Nom : <code>production_enrichie</code></li>
+<li>Click on the icon <br />
+   - weekend<br />
+   - maintenance<br />
+   - pluie_mm<br />
+   - vent_mps (renommer en vent_mps_meteo)<br />
+   - jour<br />
+   - mois</li>
+</ol>
+<hr />
+<p><a id="33-colonnes-calculees-finales"></a></p>
+<h4>3.3 Final calculated columns</h4>
+<p><strong>Add Column</strong> → <strong>Custom Column</strong> (repeat 3 times):</p>
+<p><strong>1. Adjusted production</strong> :</p>
+<pre><code>Nom : production_kwh_ajustee
+Formule : if [maintenance] = 1 then null else [production_kwh]
+</code></pre>
+<p><strong>2. Nominal capacity</strong> :</p>
+<pre><code>Nom : capacite_nominale_kwh
+Formule : if [type] = &quot;solaire&quot; then 5000 
+          else if [type] = &quot;eolien&quot; then 10000 
+          else if [type] = &quot;hydro&quot; then 20000 
+          else null
+</code></pre>
+<p><strong>3. Facteur de charge</strong> :</p>
+<pre><code>Nom : facteur_charge_pct
+Formule : if [capacite_nominale_kwh] &gt; 0 
+          then ([production_kwh] / [capacite_nominale_kwh]) * 100 
+          else null
+</code></pre>
+<hr />
+<p><a id="etape-4-configuration-de-la-destination"></a></p>
+<h3>STEP 4: Setting the destination</h3>
+<ol>
+<li>
+<p>Select Query <strong>production_enrichie</strong></p>
+</li>
+<li>
+<p><strong>Add data destination</strong> (bottom right) → <strong>Lakehouse</strong></p>
+</li>
+<li>
+<p>Configuration :</p>
+</li>
+</ol>
+<ul>
+<li>Workspace: (your workspace)</li>
+<li>Lakehouse : LH_Energies_Renouvelables</li>
+<li>Table: <code>production_energies_renouvelables</code></li>
+<li>Update method : <strong>Append</strong></li>
+</ul>
+<ol start="4">
+<li><strong>Publish</strong> (top right)</li>
+</ol>
+<hr />
+<p><a id="etape-5-test-manuel"></a></p>
+<h3>STEP 5: Manual test</h3>
+<ol>
+<li>Go to Workspace</li>
+<li>Trouver <code>DF_Harmonisation_Production_Renouvelable</code></li>
+<li><strong>⋯</strong> → <strong>Refresh now</strong></li>
+<li>Attendre 2-3 minutes</li>
+<li>Check: Status = "Followed"</li>
+</ol>
+<hr />
+<p><a id="etape-6-validation-des-donnees"></a></p>
+<h3>STEP 6: Data validation</h3>
+<p><strong>In Lakehouse</strong> :</p>
+<ol>
+<li>Ouvrir <code>LH_Energies_Renouvelables</code></li>
+<li><strong>Tables</strong> → <code>production_energies_renouvelables</code></li>
+<li><strong>SQL analytics endpoint</strong> → <strong>New SQL query</strong></li>
+</ol>
+<p><strong>Validation Request</strong> :</p>
+<pre><code class="language-sql">-- Check the number of rows per type
+SELECT
+type,
+CUNT(*) as nb lines,
+MIN(date) as date min,
+MAX(date) as date max
+From production energy renewables
+GROUP BY type
+ORDER BY type;
+
+-- Expected result:
+-- eolian
+-- hydro
+-- solar
+</code></pre>
+<p><strong>Check for no duplicates</strong> :</p>
+<pre><code class="language-sql">SELECT date, park id, CUNT(*) as nb
+From production energy renewables
+GROUP BY date, park id
+HAVING COUNT(*) &gt; 1;
+
+-- Expected result: 0 lines
+</code></pre>
+<hr />
+<p><a id="etape-7-orchestration-avec-pipeline"></a></p>
+<h3>STEP 7: Orchestration with Pipeline</h3>
+<p><strong>7.1 Create Pipeline</strong></p>
+<ol>
+<li>Workspace → <strong>+ New</strong> → <strong>Data pipeline</strong></li>
+<li>Nom : <code>Pipeline_Daily_Energy_Refresh</code></li>
+</ol>
+<p><strong>7.2. Add activities</strong></p>
+<ol>
+<li><strong>Activities</strong> → <strong>Dataflow</strong> → Slide on the canvas</li>
+<li><strong>Settings</strong> → Dataflow : <code>DF_Harmonisation_Production_Renouvelable</code></li>
+<li><strong>Activities</strong> → <strong>Office365 Outlook</strong> → <strong>Send email</strong> (success notification)</li>
+<li>Connect Dataflow → Email with arrow "On Success"</li>
+</ol>
+<p><strong>7.3 Planification</strong></p>
+<ol>
+<li><strong>Home</strong> → <strong>Schedule</strong></li>
+<li>Configuration :<br />
+   - Repeat : Daily<br />
+   - Time : 06:15<br />
+   - Time zone : (UTC+01:00) Paris<br />
+   - Start date : (aujourd'hui)</li>
+</ol>
+<p><strong>7.4 Gestion d'erreurs</strong></p>
+<ol>
+<li>
+<p>Select Dataflow activity</p>
+</li>
+<li>
+<p><strong>Settings</strong> → <strong>Advanced</strong> :</p>
+</li>
+</ol>
+<ul>
+<li>Retry : 3</li>
+<li>Retry interval : 60 seconds</li>
+<li>Timeout : 1 hour</li>
+</ul>
+<ol start="3">
+<li><strong>Save</strong> → <strong>Run</strong> (test)</li>
+</ol>
+<hr />
+<p><a id="etape-8-optionnelle-activer-les-optimisations-2025"></a></p>
+<h3>STEP 8 (Optional): Enable 2025 optimizations</h3>
+<p><strong>To improve performance (recommended)</strong> :</p>
+<ol>
+<li>Open Dataflow <code>DF_Harmonisation_Production_Renouvelable</code></li>
+<li><strong>Home</strong> → <strong>Options</strong></li>
+<li>Onglet <strong>Scale</strong> :<br />
+   - ☑️ <strong>Query evaluation</strong> (Modern Evaluator) → Gain de 20-30% de vitesse<br />
+   - ☑️ <strong>Partitioned compute</strong> → Parallel treatment (if applicable)</li>
+<li><strong>OK</strong> → <strong>Publish</strong></li>
+</ol>
+<p><strong>Expected result</strong> :</p>
+<pre><code>Without optimizations: 2-3 minutes of refresh
+With Modern Evaluator: 1.5-2 minutes of refresh
+→ 30% saving time AND CU costs
+</code></pre>
+<hr />
+<p><a id="conclusion-et-interpretation"></a></p>
+<h2>Conclusion and interpretation</h2>
+<p><a id="ce-qui-a-ete-accompli"></a></p>
+<h3>What has been accomplished</h3>
+<p><strong>Data transformation</strong> :</p>
+<pre><code>BEFORE AFTER
+5,625 gross lines → 4,235 clean lines
+4 different diagrams → 1 unified diagram
+Isolated data → Enriched (meteo + calendar)
+Manual process (3h/day) → Automation (5 min/day → 1.5 min with optimizations 2025)
+</code></pre>
+<p><strong>Quality obtained</strong> :</p>
+<ul>
+<li>✅ <strong>0 doublon</strong> (150 removed from wind)</li>
+<li>✅ <strong>0 error code</strong> (90 lines -888 deleted)</li>
+<li>✅ <strong>0 missing value</strong> (NaN filtered)</li>
+<li>✅ <strong>Unified dates</strong> (2 formats → 1 format standard)</li>
+<li>✅ <strong>Harmonized units</strong> (MWh → kWh)</li>
+</ul>
+<p><a id="indicateurs-metier-crees"></a></p>
+<h3>Business indicators created</h3>
+<p><strong>KPIs available immediately</strong> :</p>
+<ol>
+<li><strong>Production totale</strong> : ~36,405 MWh/an</li>
+</ol>
+<ul>
+<li>Hydro : 47% (production de base)</li>
+<li>Wind turbine: 39% (variable)</li>
+<li>Solaire : 14% (saisonnier)</li>
+</ul>
+<ol start="2">
+<li><strong>Facteur de charge</strong> :</li>
+</ol>
+<ul>
+<li>Hydro : 86% (excellent)</li>
+<li>Wind turbine: 39% (compliant with standards)</li>
+<li>Solar: 28% (normal for France)</li>
+</ul>
+<ol start="3">
+<li><strong>Availability</strong> :</li>
+</ol>
+<ul>
+<li>Hydro : 99% (ultra-fiable)</li>
+<li>Wind energy: 96%</li>
+<li>Solar: 93% (to be investigated)</li>
+</ul>
+<p><a id="valeur-metier"></a></p>
+<h3>Business value</h3>
+<p><strong>Gains quantifiables</strong> :</p>
+<ul>
+<li>⏱️ <strong>Time saved</strong> : 2h/jour × 250 jours = 500h/an = <strong>30,000 €/an</strong></li>
+<li>💰 <strong>Errors avoided</strong> : Doubles eliminated = <strong>190,200 €</strong> error of decision</li>
+<li>🚀 <strong>Time-to-insight</strong> : 5h30 → 5 minutes (refresh automatique)</li>
+<li>💸 <strong>Cost reduction CU (2025)</strong> : With Modern Evaluator = <strong>30% of CU saved</strong></li>
+</ul>
+<p><strong>Unlocked capacity</strong> :</p>
+<ul>
+<li>Dashboard real time unified</li>
+<li>Automatic alerts on anomalies</li>
+<li></li>
+<li>Comprehensive History (Delta Lake)</li>
+<li>Solid basis for predictive LM (next step)</li>
+<li>🆕 <strong>Copilot IA</strong> : Natural language transformations available</li>
+</ul></main>
+</body>
+</html>
