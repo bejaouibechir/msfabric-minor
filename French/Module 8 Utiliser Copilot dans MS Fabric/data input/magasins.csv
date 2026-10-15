@@ -1,0 +1,14 @@
+﻿store_code,nom_magasin,region,surface_m2
+MAG-001,Paris République,Île-de-France,920
+MAG-002,Paris Batignolles,Île-de-France,760
+MAG-003,Lille Centre,Hauts-de-France,680
+MAG-004,Lyon Presqu'île,Auvergne-Rhône-Alpes,810
+MAG-005,Bordeaux Chartrons,Nouvelle-Aquitaine,720
+MAG-006,Nantes Graslin,Pays de la Loire,640
+MAG-007,Marseille Prado,Provence-Alpes-Côte d'Azur,870
+MAG-008,Toulouse Capitole,Occitanie,700
+MAG-009,Strasbourg Kléber,Grand Est,650
+MAG-010,Rennes Colombier,Bretagne,610
+MAG-011,Montpellier Comédie,Occitanie,690
+MAG-012,Nice Masséna,Provence-Alpes-Côte d'Azur,740
+MAG-004,Lyon Presqu'île — ancienne fiche,Auvergne-Rhône-Alpes,805

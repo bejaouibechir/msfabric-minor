@@ -22,3 +22,15 @@ apm_modules/
 .translation-runtime/
 .translation-runtime-user/
 .translation-data/
+
+# Module 9 : plans et recommandations de collaboration Claude/GPT
+French/Module 9*/_plans/
+.work-folder-info
+4fb34ab5-48f3-46c2-bce6-8a567eafbac4
+_plans
+.vfsmeta
+.vfscache
+.stubs
+Backup
+gen_atelier1.py
+
